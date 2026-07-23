@@ -1,0 +1,37 @@
+{
+  "indentation": {
+    "spaces": 4
+  },
+  "indentBlankLines": false,
+  "indentConditionalCompilationBlocks": false,
+  "multilineTrailingCommaBehavior": "alwaysUsed",
+  "lineBreakAroundMultilineExpressionChainComponents": false,
+  "lineBreakBeforeControlFlowKeywords": false,
+  "lineBreakBeforeEachArgument": true,
+  "lineBreakBeforeEachGenericRequirement": true,
+  "lineLength": 100,
+  "maximumBlankLines": 1,
+  "prioritizeKeepingFunctionOutputTogether": true,
+  "reflowMultilineStringLiterals": "onlyLinesOverLength",
+  "rules": {
+    "AlwaysUseLiteralForEmptyCollectionInit": true,
+    "IdentifiersMustBeASCII": false,
+    "NoEmptyTrailingClosureParentheses": true,
+    "NoParensAroundConditions": true,
+    "NoVoidReturnOnFunctionSignature": true,
+    "OneVariableDeclarationPerLine": true,
+    "OrderedImports": true,
+    "OmitExplicitReturns": true,
+    "ReturnVoidInsteadOfEmptyTuple": true,
+    "UseShorthandTypeNames": true,
+    "UseTripleSlashForDocumentationComments": true,
+    "UseEarlyExits": true,
+    "NoAccessLevelOnExtensionDeclaration": true,
+    "FileScopedDeclarationPrivacy": true,
+    "UseSingleLinePropertyGetter": true,
+    "UseWhereClausesInForLoops": true
+  },
+  "spacesAroundRangeFormationOperators": false,
+  "tabWidth": 4,
+  "version": 1
+}
