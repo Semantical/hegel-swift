@@ -4,7 +4,7 @@ import CHegel
 struct Context: ~Copyable {
     var handle: OpaquePointer
 
-    init() throws {
+    init() throws(HegelError) {
         guard let handle = unsafe hegel_context_new() else {
             throw HegelError("Hegel could not allocate an error context.")
         }
@@ -23,7 +23,7 @@ struct Context: ~Copyable {
         )
     }
 
-    func check(_ result: hegel_result_t) throws {
+    func check(_ result: hegel_result_t) throws(HegelError) {
         guard result == HEGEL_OK else {
             throw error(for: result)
         }
