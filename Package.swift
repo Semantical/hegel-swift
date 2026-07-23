@@ -19,6 +19,10 @@ var package = Package(
         .library(
             name: "Hegel",
             targets: ["Hegel"],
+        ),
+        .library(
+            name: "HegelTesting",
+            targets: ["HegelTesting"],
         )
     ],
     targets: [
@@ -31,9 +35,14 @@ var package = Package(
             dependencies: ["CHegel"],
             swiftSettings: swiftSettings,
         ),
+        .target(
+            name: "HegelTesting",
+            dependencies: ["Hegel"],
+            swiftSettings: swiftSettings,
+        ),
         .testTarget(
             name: "HegelTests",
-            dependencies: ["Hegel"],
+            dependencies: ["HegelTesting"],
             swiftSettings: swiftSettings,
         ),
     ],

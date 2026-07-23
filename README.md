@@ -1,26 +1,43 @@
 # hegel-swift
 
-An idiomatic Swift interface to [Hegel](https://github.com/hegeldev/hegel-rust), the property-based testing engine built on Hypothesis.
+An idiomatic Swift interface to [Hegel](https://github.com/hegeldev/hegel-rust), the property-based testing engine based on Hypothesis.
 
 ```swift
-try await Hegel.test { testCase in
-    let values = try testCase.draw(
-        .arrays(of: .integers(in: 0...100))
-    )
+import HegelTesting
+import Testing
 
-    guard propertyHolds(for: values) else {
-        throw PropertyError(values: values)
+@Test(.hegel)
+func sorting() async throws {
+    try await Hegel.test { testCase in
+        let values = try testCase.draw(.arrays(of: .integers()))
+        #expect(values.sorted().count == values.count)
     }
 }
 ```
 
-When a property throws, Hegel searches for a smaller counterexample and `Hegel.test` reports one `PropertyFailure` containing both the minimal failure and a reproduction blob:
+Expectation failures produced while Hegel searches and shrinks are suppressed.
+Swift Testing reports the first expectation from the minimal counterexample with
+Hegel's reproduction blob attached as a comment.
+
+Hegel stores minimized failures under `.hegel/examples` and tries them before
+generating new examples. The `.hegel` trait keys this database by Swift
+Testing's test identity. Swift Testing parameterized tests are therefore not
+supported; draw arguments from the Hegel test case instead.
+
+Treat `.hegel/` as a generated local cache and exclude it from version control.
+Hegel disables the default database in recognized CI environments; configure a
+custom database path if it is backed by a persistent CI cache.
+
+To debug one exact failure, temporarily configure the test with its reproduction
+blob:
 
 ```swift
-try await Hegel.test(reproducing: "...") { testCase in
-    // The same property and draws.
-}
+@Test(.hegel(reproducing: "AAEAAAAACgEAAAAF"))
 ```
+
+Remove the reproduction trait after fixing the failure so the test resumes
+exploration. Reproduction blobs are debugging artifacts; the database provides
+automatic regression reuse between exploratory runs.
 
 ## Artifact
 

@@ -152,24 +152,49 @@ struct Run: ~Copyable {
 
 /// Searches for a counterexample to an async throwing property.
 ///
-/// Draw values from the borrowed test case. Any error escaping `property`
-/// marks that case as interesting; Hegel shrinks it and this function throws
-/// one ``PropertyFailure`` containing the minimal error and a reproduction blob.
+/// Draw values from the borrowed test case. Swift Testing issues and errors
+/// escaping `property` mark that case as interesting. Hegel shrinks the case,
+/// then reports the native issue or rethrows the original error from its final
+/// replay.
 public func test(
-    settings: Settings = .init(),
     fileID: StaticString = #fileID,
     line: UInt = #line,
     _ property: (borrowing TestCase) async throws -> Void,
 ) async throws {
-    let cSettings = try CSettings(settings)
-    var run = try Run(settings: cSettings)
     let origin = "\(fileID):\(line)"
+    let scope = _HegelScope.current
+    // Integrations provide their logical test identity. The call site keeps
+    // persistence available to standalone harnesses.
+    let settings = try CSettings(
+        scope.settings ?? .init(),
+        databaseKey: scope.databaseKey ?? origin,
+    )
 
+    if let reproduction = scope.reproduction {
+        try await replay(
+            reproduction,
+            settings: settings,
+            origin: origin,
+            failureExpected: false,
+            property,
+        )
+        return
+    }
+
+    var run = try Run(settings: settings)
     while let testCase = try run.next() {
+        let issueContext = _HegelIssueContext(
+            phase: .exploring,
+            owner: scope.errorReporter,
+        )
+        var attemptScope = scope
+        attemptScope.issueContext = issueContext
         let status: TestStatus
         do {
-            try await property(testCase)
-            status = .valid
+            try await _HegelScope.$current.withValue(attemptScope) {
+                try await property(testCase)
+            }
+            status = issueContext.hasRecordedIssue ? .interesting(origin) : .valid
         } catch let error as CancellationError {
             throw error
         } catch TestControl.invalid {
@@ -188,91 +213,66 @@ public func test(
     case .error(let message):
         throw HegelError(message)
     case .failed(let failure):
-        let cause = try await replayDescription(
+        try await replay(
             failure.reproduction,
-            settings: cSettings,
+            settings: settings,
             origin: failure.origin,
+            failureExpected: true,
             property,
         )
-        throw PropertyFailure(
-            origin: failure.origin,
-            reproduction: failure.reproduction,
-            cause: cause,
-        )
     }
 }
 
-/// Runs a property once using a prior failure's reproduction blob.
-///
-/// If the property still fails, this function rethrows its original error.
-public func test(
-    reproducing reproduction: String,
-    settings: Settings = .init(),
-    _ property: (borrowing TestCase) async throws -> Void,
-) async throws {
-    let cSettings = try CSettings(settings)
-    let testCase = try makeReplay(reproduction, settings: cSettings)
-    let status: TestStatus
-    let failure: (any Error)?
-    do {
-        try await property(testCase)
-        status = .valid
-        failure = nil
-    } catch let error as CancellationError {
-        throw error
-    } catch TestControl.invalid {
-        status = .invalid
-        failure = HegelError("The reproduced test case was rejected.")
-    } catch TestControl.overrun {
-        status = .overrun
-        failure = HegelError(
-            "The reproduction no longer matches the property's draws."
-        )
-    } catch {
-        status = .interesting("reproduced failure")
-        failure = error
-    }
-    try testCase.complete(status)
-    if let failure {
-        throw failure
-    }
-}
-
-func replayDescription(
+func replay(
     _ reproduction: String,
     settings: borrowing CSettings,
     origin: String,
+    failureExpected: Bool,
     _ property: (borrowing TestCase) async throws -> Void,
-) async throws -> String {
+) async throws {
+    let testCase = try makeReplay(reproduction, settings: settings)
+    let scope = _HegelScope.current
+    let issueContext = _HegelIssueContext(
+        phase: .replaying(reproduction: reproduction),
+        owner: scope.errorReporter,
+    )
+    var attemptScope = scope
+    attemptScope.issueContext = issueContext
+
     do {
-        let testCase = try makeReplay(reproduction, settings: settings)
-        let status: TestStatus
-        let description: String
-        do {
+        try await _HegelScope.$current.withValue(attemptScope) {
             try await property(testCase)
-            status = .valid
-            description =
-                "The minimal counterexample no longer failed during replay."
-        } catch let error as CancellationError {
-            throw error
-        } catch TestControl.invalid {
-            status = .invalid
-            description =
-                "The minimal counterexample was rejected during replay."
-        } catch TestControl.overrun {
-            status = .overrun
-            description =
-                "The minimal counterexample exhausted its choice data."
-        } catch {
-            status = .interesting(origin)
-            description = String(describing: error)
         }
-        try testCase.complete(status)
-        return description
     } catch let error as CancellationError {
         throw error
+    } catch TestControl.invalid {
+        try testCase.complete(.invalid)
+        throw HegelError("The reproduced test case was rejected.")
+    } catch TestControl.overrun {
+        try testCase.complete(.overrun)
+        throw HegelError("The reproduction no longer matches the property's draws.")
     } catch {
-        return "Replaying the minimal counterexample failed: \(error)"
+        try testCase.complete(.interesting(origin))
+        guard !issueContext.hasRecordedIssue else {
+            return
+        }
+        guard let errorReporter = scope.errorReporter else {
+            throw error
+        }
+        _HegelScope.$current.withValue(attemptScope) {
+            errorReporter(error)
+        }
+        return
+    }
+
+    if issueContext.hasRecordedIssue {
+        try testCase.complete(.interesting(origin))
+        return
+    }
+
+    try testCase.complete(.valid)
+    guard !failureExpected else {
+        throw HegelError("The minimal counterexample no longer failed during replay.")
     }
 }
 

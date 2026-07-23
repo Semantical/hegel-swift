@@ -40,7 +40,10 @@ struct CSettings: ~Copyable {
     var context: Context
     var handle: OpaquePointer
 
-    init(_ settings: Settings) throws {
+    init(
+        _ settings: Settings,
+        databaseKey: String,
+    ) throws {
         let context = try Context()
         var handle: OpaquePointer?
         try context.check(
@@ -103,6 +106,15 @@ struct CSettings: ~Copyable {
                         )
                     )
                 }
+            }
+            try databaseKey.withCString { databaseKey in
+                try context.check(
+                    unsafe hegel_settings_set_database_key(
+                        context.handle,
+                        handle,
+                        databaseKey,
+                    )
+                )
             }
         } catch {
             _ = unsafe hegel_settings_free(context.handle, handle)

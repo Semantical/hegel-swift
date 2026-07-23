@@ -1,0 +1,7 @@
+{
+  "reportSyntacticHighlightInSemanticTokens": true,
+  "swiftPM": {
+    "buildSystem": "swiftbuild",
+    "scratchPath": ".build/index-build"
+  }
+}
