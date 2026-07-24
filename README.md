@@ -9,8 +9,8 @@ import Testing
 
 @Test(.hegel)
 func sorting() async throws {
-    try await Hegel.test { testCase in
-        let values = try testCase.draw(.arrays(of: .integers()))
+    try await Hegel.test { ctx in
+        let values = try ctx.draw(.arrays(of: .integers()))
         #expect(values.sorted().count == values.count)
     }
 }
@@ -40,54 +40,66 @@ arrays, sets, dictionaries, and arbitrary tuple arities.
 
 State machines exercise systems through sequences of named rules. Hegel chooses
 and shrinks the rule sequence, while invariants are checked initially and after
-every successful rule:
+every successful rule.
+
+Declare rules and invariants as ordinary instance methods:
 
 ```swift
-struct TextMachine: StateMachine {
+@StateMachine
+struct TextMachine {
     var text = ""
     var model: [Character] = []
 
-    static var rules: Rules {
-        rule("append") { machine, testCase in
-            let character = try testCase.draw(.characters())
-            machine.text.append(character)
-            machine.model.append(character)
-        }
-
-        rule("remove last") { machine, testCase in
-            try testCase.assume(!machine.model.isEmpty)
-            #expect(machine.text.popLast() == machine.model.removeLast())
-        }
+    @Rule
+    mutating func append(ctx: borrowing TestCase) throws {
+        let character = try ctx.draw(.characters())
+        text.append(character)
+        model.append(character)
     }
 
-    static var invariants: Invariants {
-        invariant("text matches the model") { machine in
-            #expect(Array(machine.text) == machine.model)
-        }
+    @Rule
+    mutating func removeLast(ctx: borrowing TestCase) throws {
+        try ctx.assume(!model.isEmpty)
+        #expect(text.popLast() == model.removeLast())
+    }
+
+    @Invariant
+    func textMatchesModel() {
+        #expect(Array(text) == model)
     }
 
     @Test(.hegel)
     static func property() async throws {
-        try await Hegel.test { testCase in
-            try await testCase.run(Self())
+        try await Hegel.test { ctx in
+            try await ctx.run(Self())
         }
     }
 }
 ```
 
-`Pool<Value>` lets later rules draw values created by earlier rules. A draw
-reuses an active value, while `take(from:)` consumes it. A machine containing a
-pool is noncopyable and declares `~Copyable` explicitly:
+`Pool<Value>` lets later rules draw values created by earlier rules. While a
+state machine is running, its pools share an independent choice stream and can
+use the context-free operations below. Equal values remain distinct. A draw
+reuses an active value, while `take()` consumes it. A machine containing a pool
+is noncopyable and declares `~Copyable` explicitly:
 
 ```swift
-struct Machine: ~Copyable, StateMachine {
+@StateMachine
+struct Machine: ~Copyable {
     var ids = Pool<Int>()
-    // ...
-}
 
-try testCase.add(id, to: &machine.ids)
-let existing = try testCase.draw(from: machine.ids)
-let removed = try testCase.take(from: &machine.ids)
+    @Rule
+    mutating func create(ctx: borrowing TestCase) throws {
+        let id = try ctx.draw(.integers())
+        try ids.add(id)
+    }
+
+    @Rule
+    mutating func remove() throws {
+        let id = try ids.take()
+        // Remove id from the system under test.
+    }
+}
 ```
 
 Hegel stores minimized failures under `.hegel/examples` and tries them before

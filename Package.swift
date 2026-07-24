@@ -1,5 +1,6 @@
 // swift-tools-version: 6.4
 
+import CompilerPluginSupport
 import PackageDescription
 
 var swiftSettings: [SwiftSetting] = [
@@ -23,6 +24,19 @@ var package = Package(
         .library(
             name: "HegelTesting",
             targets: ["HegelTesting"],
+        ),
+    ],
+    traits: [
+        .default(enabledTraits: ["HegelMacros"]),
+        .trait(
+            name: "HegelMacros",
+            description: "Enables Hegel's macros.",
+        ),
+    ],
+    dependencies: [
+        .package(
+            url: "https://github.com/swiftlang/swift-syntax",
+            "600.0.0"..<"605.0.0",
         )
     ],
     targets: [
@@ -32,7 +46,24 @@ var package = Package(
         ),
         .target(
             name: "Hegel",
-            dependencies: ["CHegel"],
+            dependencies: [
+                "CHegel",
+                .target(
+                    name: "HegelMacrosPlugin",
+                    condition: .when(traits: ["HegelMacros"]),
+                ),
+            ],
+            swiftSettings: swiftSettings,
+        ),
+        .macro(
+            name: "HegelMacrosPlugin",
+            dependencies: [
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+                .product(name: "SwiftDiagnostics", package: "swift-syntax"),
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+            ],
             swiftSettings: swiftSettings,
         ),
         .target(
@@ -45,6 +76,39 @@ var package = Package(
             dependencies: ["HegelTesting"],
             swiftSettings: swiftSettings,
         ),
+        .testTarget(
+            name: "HegelMacroTests",
+            dependencies: [
+                .target(
+                    name: "HegelMacrosPlugin",
+                    condition: .when(traits: ["HegelMacros"]),
+                ),
+                .product(name: "SwiftDiagnostics", package: "swift-syntax"),
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
+            ],
+            swiftSettings: swiftSettings,
+        ),
     ],
     swiftLanguageModes: [.v6],
 )
+
+let macroCondition = TargetDependencyCondition.when(traits: ["HegelMacros"])
+for target in package.targets {
+    target.dependencies = target.dependencies.map { dependency in
+        guard
+            case .productItem(let name, let package?, let moduleAliases, _) = dependency,
+            package == "swift-syntax"
+        else {
+            return dependency
+        }
+        return .product(
+            name: name,
+            package: package,
+            moduleAliases: moduleAliases,
+            condition: macroCondition,
+        )
+    }
+}

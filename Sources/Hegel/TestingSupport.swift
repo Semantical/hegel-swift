@@ -52,6 +52,7 @@ public struct _HegelScope: Sendable {
     public var reproduction: String?
     public var errorReporter: _HegelErrorReporter?
     public var issueContext: _HegelIssueContext?
+    var poolTestCase: PoolTestCase?
 
     @TaskLocal
     public static var current = Self()
