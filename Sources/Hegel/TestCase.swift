@@ -31,7 +31,7 @@ public struct TestCase: ~Copyable {
     }
 
     /// Draws a value from a generator.
-    public func draw<Value>(_ generator: Generator<Value>) throws -> Value {
+    public func draw<Value>(_ generator: Gen<Value>) throws -> Value {
         try generator.draw(self)
     }
 
@@ -232,7 +232,7 @@ public struct TestCase: ~Copyable {
     }
 
     func filtered<Value>(
-        _ generator: Generator<Value>,
+        _ generator: Gen<Value>,
         by predicate: (Value) throws -> Bool,
     ) throws -> Value {
         for _ in 0..<3 {
@@ -267,7 +267,7 @@ public struct TestCase: ~Copyable {
     }
 
     func array<Element>(
-        of element: Generator<Element>,
+        of element: Gen<Element>,
         size: ClosedRange<Int>,
     ) throws -> [Element] {
         try withCollection(
@@ -288,7 +288,7 @@ public struct TestCase: ~Copyable {
     }
 
     func set<Element>(
-        of element: Generator<Element>,
+        of element: Gen<Element>,
         size: ClosedRange<Int>,
     ) throws -> Set<Element> {
         let domain = element.enumeratedValues.map(unique)
@@ -319,8 +319,8 @@ public struct TestCase: ~Copyable {
     }
 
     func dictionary<Key, Value>(
-        keys: Generator<Key>,
-        values: Generator<Value>,
+        keys: Gen<Key>,
+        values: Gen<Value>,
         size: ClosedRange<Int>,
     ) throws -> [Key: Value] {
         let domain = keys.enumeratedValues.map(unique)

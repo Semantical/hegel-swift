@@ -36,12 +36,12 @@ private let capturedArrayIssue = Mutex<Issue?>(nil)
 struct GeneratorTests {
     @Test
     func `composes generators`() async throws {
-        let smallEvens = Generator<Int>.sampled(from: 0...10)
+        let smallEvens = Gen<Int>.sampled(from: 0...10)
             .filter { $0.isMultiple(of: 2) }
             .map { $0 * 2 }
-        let dependent = Generator<Int>.integers(in: 20...22)
+        let dependent = Gen<Int>.integers(in: 20...22)
             .flatMap { .just($0 + 1) }
-        let generator = Generator<Int>.oneOf(smallEvens, dependent)
+        let generator = Gen<Int>.oneOf(smallEvens, dependent)
             .optional(probabilityOfSome: 0.8)
 
         try await Hegel.test { testCase in
@@ -54,13 +54,13 @@ struct GeneratorTests {
 
     @Test
     func `supports recursive generator definitions`() async throws {
-        let tree = Generator<Tree>.deferred()
+        let tree = Gen<Tree>.deferred()
         let recursive = tree.generator
-        let branch = Generator<(Tree, Tree)>.tuple(recursive, recursive)
+        let branch = Gen<(Tree, Tree)>.tuple(recursive, recursive)
             .map { Tree.branch($0, $1) }
         tree.set(
             .oneOf(
-                Generator<Int>.integers(in: 10...20).map(Tree.leaf),
+                Gen<Int>.integers(in: 10...20).map(Tree.leaf),
                 branch,
             )
         )
@@ -74,15 +74,15 @@ struct GeneratorTests {
     @Test
     func `generates scalar values across their native ranges`() async throws {
         try await Hegel.test { testCase in
-            let signed = try testCase.draw(Generator<Int8>.integers(in: -128 ... -100))
+            let signed = try testCase.draw(Gen<Int8>.integers(in: -128 ... -100))
             let unsigned = try testCase.draw(
-                Generator<UInt64>.integers(in: (UInt64.max - 100)...UInt64.max)
+                Gen<UInt64>.integers(in: (UInt64.max - 100)...UInt64.max)
             )
             let float = try testCase.draw(
-                Generator<Float>.floats(in: -10...10)
+                Gen<Float>.floats(in: -10...10)
             )
             let double = try testCase.draw(
-                Generator<Double>.floats(in: -10...10)
+                Gen<Double>.floats(in: -10...10)
             )
 
             #expect((-128 ... -100).contains(signed))
@@ -94,18 +94,18 @@ struct GeneratorTests {
 
     @Test
     func `generates bytes strings characters and fixed products`() async throws {
-        let tuple = Generator<(UInt8, String)>.tuple(
-            Generator<UInt8>.integers(in: 200...255),
+        let tuple = Gen<(UInt8, String)>.tuple(
+            Gen<UInt8>.integers(in: 200...255),
             .strings(size: 2...8),
         )
-        let inlineArray = Generator<InlineArray<4, UInt8>>.inlineArrays(
+        let inlineArray = Gen<InlineArray<4, UInt8>>.inlineArrays(
             of: .integers(in: 200...255)
         )
 
         try await Hegel.test { testCase in
-            let bytes = try testCase.draw(Generator<[UInt8]>.bytes(size: 3...12))
+            let bytes = try testCase.draw(Gen<[UInt8]>.bytes(size: 3...12))
             let (integer, string) = try testCase.draw(tuple)
-            let character = try testCase.draw(Generator<Character>.characters())
+            let character = try testCase.draw(Gen<Character>.characters())
             let fixed = try testCase.draw(inlineArray)
 
             #expect((3...12).contains(bytes.count))
@@ -118,21 +118,21 @@ struct GeneratorTests {
 
     @Test
     func `draws unordered collections without replacement`() async throws {
-        let keys = Generator<Int>.sampled(from: [1, 1, 2, 3])
+        let keys = Gen<Int>.sampled(from: [1, 1, 2, 3])
 
         try await Hegel.test { testCase in
             let set = try testCase.draw(
-                Generator<Set<Int>>.sets(of: keys, size: 3...8)
+                Gen<Set<Int>>.sets(of: keys, size: 3...8)
             )
             let dictionary = try testCase.draw(
-                Generator<[Int: Bool]>.dictionaries(
+                Gen<[Int: Bool]>.dictionaries(
                     keys: keys,
                     values: .booleans(),
                     size: 3...8,
                 )
             )
             let generatedSet = try testCase.draw(
-                Generator<Set<Int>>.sets(
+                Gen<Set<Int>>.sets(
                     of: .integers(in: 1...3),
                     size: 3...3,
                 )
@@ -147,7 +147,7 @@ struct GeneratorTests {
     @Test
     func `does not draw values for rejected dictionary keys`() async throws {
         let valueDraws = Mutex(0)
-        let values = Generator<Int>.integers().map { value in
+        let values = Gen<Int>.integers().map { value in
             valueDraws.withLock { $0 += 1 }
             return value
         }
@@ -155,7 +155,7 @@ struct GeneratorTests {
         try await Hegel.test { testCase in
             valueDraws.withLock { $0 = 0 }
             let dictionary = try testCase.draw(
-                Generator<[Int: Int]>.dictionaries(
+                Gen<[Int: Int]>.dictionaries(
                     keys: .integers(in: 0...0),
                     values: values,
                     size: 1...3,
@@ -181,7 +181,7 @@ struct GeneratorTests {
 
         try await Hegel.test { testCase in
             let values = try testCase.draw(
-                Generator<[Int]>.arrays(
+                Gen<[Int]>.arrays(
                     of: .integers(in: 0...100),
                     size: 0...10,
                 )

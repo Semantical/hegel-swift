@@ -23,11 +23,11 @@ Hegel's reproduction blob attached as a comment.
 Generators compose:
 
 ```swift
-let identifier = Generator<UInt64>.integers()
-let name = Generator<String>.strings(size: 1...40)
-let user = Generator<(UInt64, String)>.tuple(identifier, name)
+let identifier = Gen<UInt64>.integers()
+let name = Gen<String>.strings(size: 1...40)
+let user = Gen<(UInt64, String)>.tuple(identifier, name)
 
-let users = Generator<[(UInt64, String)]>.arrays(
+let users = Gen<[(UInt64, String)]>.arrays(
     of: user.filter { !$0.1.isEmpty },
     size: 0...100,
 )

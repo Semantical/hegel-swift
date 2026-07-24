@@ -1,7 +1,7 @@
 import CHegel
 
 /// A value recipe drawn and shrunk by Hegel.
-public struct Generator<Value> {
+public struct Gen<Value> {
     var draw: (borrowing TestCase) throws -> Value
 
     // A known, practically enumerable domain lets unordered collections draw
@@ -19,7 +19,7 @@ public struct Generator<Value> {
 
 // MARK: - Composition
 
-extension Generator {
+extension Gen {
     /// Creates a forward-reference definition for recursive generators.
     public static func deferred() -> DeferredGeneratorDefinition<Value> {
         DeferredGeneratorDefinition()
@@ -31,9 +31,7 @@ extension Generator {
     }
 
     /// Generates one of the supplied values.
-    public static func sampled(
-        from values: some Collection<Value>
-    ) -> Self {
+    public static func sampled(from values: some Collection<Value>) -> Self {
         let values = Array(values)
         precondition(!values.isEmpty)
         return Self(enumeratedValues: values) { testCase in
@@ -68,8 +66,8 @@ extension Generator {
     /// Transforms generated values without changing their choices.
     public func map<NewValue>(
         _ transform: @escaping (Value) throws -> NewValue
-    ) -> Generator<NewValue> {
-        Generator<NewValue>(
+    ) -> Gen<NewValue> {
+        Gen<NewValue>(
             enumeratedValues: try? enumeratedValues?.map(transform)
         ) { testCase in
             try testCase.withSpan(label: UInt64(HEGEL_LABEL_MAPPED.rawValue)) {
@@ -80,9 +78,9 @@ extension Generator {
 
     /// Chooses a subsequent generator from the generated value.
     public func flatMap<NewValue>(
-        _ transform: @escaping (Value) throws -> Generator<NewValue>
-    ) -> Generator<NewValue> {
-        Generator<NewValue> { testCase in
+        _ transform: @escaping (Value) throws -> Gen<NewValue>
+    ) -> Gen<NewValue> {
+        Gen<NewValue> { testCase in
             try testCase.withSpan(label: UInt64(HEGEL_LABEL_FLAT_MAP.rawValue)) {
                 let generator = try transform(draw(testCase))
                 return try generator.draw(testCase)
@@ -109,9 +107,9 @@ extension Generator {
     }
 
     /// Generates either no value or a value from this generator.
-    public func optional(probabilityOfSome probability: Double = 0.5) -> Generator<Value?> {
+    public func optional(probabilityOfSome probability: Double = 0.5) -> Gen<Value?> {
         precondition((0...1).contains(probability))
-        return Generator<Value?>(
+        return Gen<Value?>(
             enumeratedValues: enumeratedValues.map { [nil] + $0.map(Optional.some) }
         ) { testCase in
             try testCase.withSpan(label: UInt64(HEGEL_LABEL_OPTIONAL.rawValue)) {
@@ -126,7 +124,7 @@ extension Generator {
 
 // MARK: - Scalar values
 
-extension Generator where Value: FixedWidthInteger {
+extension Gen where Value: FixedWidthInteger {
     /// Generates integers within a closed range.
     public static func integers(
         in range: ClosedRange<Value> = Value.min...Value.max
@@ -137,7 +135,7 @@ extension Generator where Value: FixedWidthInteger {
     }
 }
 
-extension Generator where Value == Bool {
+extension Gen where Value == Bool {
     /// Generates booleans that are true with the given probability.
     public static func booleans(probability: Double = 0.5) -> Self {
         precondition((0...1).contains(probability))
@@ -147,7 +145,7 @@ extension Generator where Value == Bool {
     }
 }
 
-extension Generator where Value == Float {
+extension Gen where Value == Float {
     /// Generates floating-point values, including special values when unbounded.
     public static func floats(
         in range: ClosedRange<Float>? = nil,
@@ -166,7 +164,7 @@ extension Generator where Value == Float {
     }
 }
 
-extension Generator where Value == Double {
+extension Gen where Value == Double {
     /// Generates floating-point values, including special values when unbounded.
     public static func floats(
         in range: ClosedRange<Double>? = nil,
@@ -185,7 +183,7 @@ extension Generator where Value == Double {
     }
 }
 
-extension Generator where Value == [UInt8] {
+extension Gen where Value == [UInt8] {
     /// Generates byte strings whose sizes fall within the given range.
     public static func bytes(size: ClosedRange<Int> = 0...10) -> Self {
         validate(size: size)
@@ -195,7 +193,7 @@ extension Generator where Value == [UInt8] {
     }
 }
 
-extension Generator where Value == String {
+extension Gen where Value == String {
     /// Generates Unicode strings whose scalar counts fall within the given range.
     public static func strings(size: ClosedRange<Int> = 0...10) -> Self {
         validate(size: size)
@@ -208,7 +206,7 @@ extension Generator where Value == String {
     }
 }
 
-extension Generator where Value == Unicode.Scalar {
+extension Gen where Value == Unicode.Scalar {
     /// Generates arbitrary Unicode scalar values.
     public static func unicodeScalars() -> Self {
         let specification = Result {
@@ -224,10 +222,10 @@ extension Generator where Value == Unicode.Scalar {
     }
 }
 
-extension Generator where Value == Character {
+extension Gen where Value == Character {
     /// Generates single-scalar characters.
     public static func characters() -> Self {
-        Generator<Unicode.Scalar>.unicodeScalars().map {
+        Gen<Unicode.Scalar>.unicodeScalars().map {
             Character(String($0))
         }
     }
@@ -235,10 +233,10 @@ extension Generator where Value == Character {
 
 // MARK: - Collections and products
 
-extension Generator {
+extension Gen {
     /// Generates arrays whose elements are drawn from another generator.
     public static func arrays<Element>(
-        of element: Generator<Element>,
+        of element: Gen<Element>,
         size: ClosedRange<Int> = 0...10,
     ) -> Self where Value == [Element] {
         validate(size: size)
@@ -249,7 +247,7 @@ extension Generator {
 
     /// Generates a fixed-size inline array.
     public static func inlineArrays<let count: Int, Element>(
-        of element: Generator<Element>
+        of element: Gen<Element>
     ) -> Self where Value == InlineArray<count, Element> {
         Self { testCase in
             try testCase.withSpan(label: UInt64(HEGEL_LABEL_TUPLE.rawValue)) {
@@ -262,7 +260,7 @@ extension Generator {
 
     /// Generates sets whose elements are drawn from another generator.
     public static func sets<Element>(
-        of element: Generator<Element>,
+        of element: Gen<Element>,
         size: ClosedRange<Int> = 0...10,
     ) -> Self where Value == Set<Element> {
         validate(size: size)
@@ -273,8 +271,8 @@ extension Generator {
 
     /// Generates dictionaries from separate key and value generators.
     public static func dictionaries<Key, Element>(
-        keys: Generator<Key>,
-        values: Generator<Element>,
+        keys: Gen<Key>,
+        values: Gen<Element>,
         size: ClosedRange<Int> = 0...10,
     ) -> Self where Value == [Key: Element] {
         validate(size: size)
@@ -285,7 +283,7 @@ extension Generator {
 
     /// Generates a fixed-shape tuple from its component generators.
     public static func tuple<each Element>(
-        _ elements: repeat Generator<each Element>
+        _ elements: repeat Gen<each Element>
     ) -> Self where Value == (repeat each Element) {
         Self { testCase in
             try testCase.withSpan(label: UInt64(HEGEL_LABEL_TUPLE.rawValue)) {
