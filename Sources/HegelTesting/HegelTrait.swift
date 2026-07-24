@@ -57,7 +57,10 @@ public struct HegelTrait: TestTrait, SuiteTrait, TestScoping {
                     guard isFirst else {
                         return nil
                     }
-                    return issue.withHegelReproduction(reproduction)
+                    return issue.withHegelContext(
+                        reproduction: reproduction,
+                        stateMachineRules: context.stateMachineRuleTrace,
+                    )
                 }
             }
 
@@ -105,8 +108,25 @@ extension Trait where Self == HegelTrait {
 }
 
 extension Issue {
-    fileprivate consuming func withHegelReproduction(_ reproduction: String) -> Self {
+    fileprivate consuming func withHegelContext(
+        reproduction: String,
+        stateMachineRules: [String]?,
+    ) -> Self {
         comments.append("Hegel reproduction: \(reproduction)")
+        if let stateMachineRules {
+            let steps =
+                stateMachineRules.isEmpty
+                ? ["Initial invariant check"]
+                : stateMachineRules.enumerated().map { index, rule in
+                    "Step \(index + 1): \(rule)"
+                }
+            comments.append(
+                Comment(
+                    rawValue: (["Hegel state machine:"] + steps)
+                        .joined(separator: "\n")
+                )
+            )
+        }
         return self
     }
 }

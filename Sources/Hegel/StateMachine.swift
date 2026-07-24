@@ -99,6 +99,8 @@ extension TestCase {
         let rules = Machine.rules
         let invariants = Machine.invariants
         precondition(!rules.isEmpty, "A state machine requires at least one rule.")
+        let issueContext = _HegelScope.current.issueContext
+        issueContext?.beginStateMachine()
 
         let stateMachineID = try stateMachine(
             rules: rules.map(\.name),
@@ -109,6 +111,7 @@ extension TestCase {
         }
 
         while let index = try nextRule(in: stateMachineID, count: rules.count) {
+            issueContext?.recordStateMachineRule(rules[index].name)
             do {
                 try await rules[index].apply(&machine, self)
             } catch TestControl.invalid {

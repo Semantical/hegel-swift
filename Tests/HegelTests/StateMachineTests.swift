@@ -96,5 +96,13 @@ private struct ShrinkingMachine: StateMachine {
         let issue = try #require(capturedStateMachineIssue.withLock { $0 })
         let failure = try #require(issue.error as? StateMachineFailure)
         #expect(failure.steps == 3)
+        #expect(
+            issue.comments.last == """
+                Hegel state machine:
+                Step 1: increment
+                Step 2: increment
+                Step 3: increment
+                """
+        )
     }
 }

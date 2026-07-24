@@ -11,6 +11,7 @@ public final class _HegelIssueContext: Sendable {
     public let phase: Phase
     public let owner: _HegelErrorReporter?
     private let recorded = Atomic(false)
+    private let stateMachineRules = Mutex<[String]?>(nil)
 
     init(
         phase: Phase,
@@ -27,6 +28,19 @@ public final class _HegelIssueContext: Sendable {
 
     var hasRecordedIssue: Bool {
         recorded.load(ordering: .relaxed)
+    }
+
+    func beginStateMachine() {
+        stateMachineRules.withLock { $0 = [] }
+    }
+
+    func recordStateMachineRule(_ name: StaticString) {
+        let name = String(describing: name)
+        stateMachineRules.withLock { $0?.append(name) }
+    }
+
+    public var stateMachineRuleTrace: [String]? {
+        stateMachineRules.withLock { $0 }
     }
 }
 
