@@ -70,6 +70,16 @@ struct HegelTests {
         }
     }
 
+    @Test
+    func `rejects duplicate targeting labels`() async throws {
+        try await Hegel.test { testCase in
+            try testCase.target(1, label: "size")
+            #expect(throws: HegelError.self) {
+                try testCase.target(2, label: "size")
+            }
+        }
+    }
+
     @Test(
         .compactMapIssues { issue in
             guard issue.comments == minimalIntegerComment else {

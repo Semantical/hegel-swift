@@ -93,7 +93,7 @@ struct GeneratorTests {
     }
 
     @Test
-    func `generates bytes strings and fixed products`() async throws {
+    func `generates bytes strings characters and fixed products`() async throws {
         let tuple = Generator<(UInt8, String)>.tuple(
             Generator<UInt8>.integers(in: 200...255),
             .strings(size: 2...8),
@@ -105,11 +105,13 @@ struct GeneratorTests {
         try await Hegel.test { testCase in
             let bytes = try testCase.draw(Generator<[UInt8]>.bytes(size: 3...12))
             let (integer, string) = try testCase.draw(tuple)
+            let character = try testCase.draw(Generator<Character>.characters())
             let fixed = try testCase.draw(inlineArray)
 
             #expect((3...12).contains(bytes.count))
             #expect((200...255).contains(integer))
             #expect((2...8).contains(string.unicodeScalars.count))
+            #expect(character.unicodeScalars.count == 1)
             #expect(fixed.indices.allSatisfy { (200...255).contains(fixed[$0]) })
         }
     }

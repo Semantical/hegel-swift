@@ -35,8 +35,60 @@ let users = Generator<[(UInt64, String)]>.arrays(
 
 The core generator vocabulary includes `map`, `flatMap`, `filter`, `oneOf`,
 `optional`, and `sampled(from:)`, along with fixed-width integers,
-floating-point values, booleans, bytes, strings, arrays, sets, dictionaries,
-and arbitrary tuple arities.
+floating-point values, booleans, bytes, Unicode scalars, characters, strings,
+arrays, sets, dictionaries, and arbitrary tuple arities.
+
+State machines exercise systems through sequences of named rules. Hegel chooses
+and shrinks the rule sequence, while invariants are checked initially and after
+every successful rule:
+
+```swift
+struct TextMachine: StateMachine {
+    var text = ""
+    var model: [Character] = []
+
+    static var rules: Rules {
+        rule("append") { machine, testCase in
+            let character = try testCase.draw(.characters())
+            machine.text.append(character)
+            machine.model.append(character)
+        }
+
+        rule("remove last") { machine, testCase in
+            try testCase.assume(!machine.model.isEmpty)
+            #expect(machine.text.popLast() == machine.model.removeLast())
+        }
+    }
+
+    static var invariants: Invariants {
+        invariant("text matches the model") { machine in
+            #expect(Array(machine.text) == machine.model)
+        }
+    }
+
+    @Test(.hegel)
+    static func property() async throws {
+        try await Hegel.test { testCase in
+            try await testCase.run(Self())
+        }
+    }
+}
+```
+
+`Pool<Value>` lets later rules draw values created by earlier rules. A draw
+reuses an active value, while `take(from:)` consumes it. A machine containing a
+pool is noncopyable and declares `~Copyable` explicitly:
+
+```swift
+struct Machine: ~Copyable, StateMachine {
+    var ids = Pool<Int>()
+    // ...
+}
+
+try testCase.add(id, to: &machine.ids)
+let existing = try testCase.draw(from: machine.ids)
+let removed = try testCase.take(from: &machine.ids)
+```
 
 Hegel stores minimized failures under `.hegel/examples` and tries them before
 generating new examples. The `.hegel` trait keys this database by Swift

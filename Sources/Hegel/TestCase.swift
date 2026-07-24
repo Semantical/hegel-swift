@@ -21,7 +21,7 @@ public struct TestCase: ~Copyable {
     var context: Context
     var handle: OpaquePointer
 
-    init(handle: OpaquePointer) throws {
+    init(handle: OpaquePointer) throws(HegelError) {
         self.context = try Context()
         unsafe self.handle = handle
     }
@@ -40,6 +40,25 @@ public struct TestCase: ~Copyable {
         guard condition() else {
             throw TestControl.invalid
         }
+    }
+
+    /// Guides Hegel toward examples with larger values under a stable label.
+    ///
+    /// Each label may be targeted once per test case.
+    public func target(
+        _ value: Double,
+        label: StaticString,
+    ) throws(HegelError) {
+        let label = String(describing: label)
+        let result = label.withCString { label in
+            unsafe hegel_target(
+                context.handle,
+                handle,
+                value,
+                label,
+            )
+        }
+        try context.check(result)
     }
 
     consuming func complete(_ status: TestStatus) throws {
@@ -207,7 +226,7 @@ public struct TestCase: ~Copyable {
         }
         let bytes = unsafe UnsafeRawBufferPointer(
             start: output.data,
-            count: output.len
+            count: output.len,
         ).bindMemory(to: UInt8.self)
         return unsafe String(decoding: bytes, as: UTF8.self)
     }
@@ -253,7 +272,7 @@ public struct TestCase: ~Copyable {
     ) throws -> [Element] {
         try withCollection(
             label: UInt64(HEGEL_LABEL_LIST.rawValue),
-            size: size
+            size: size,
         ) { collectionID in
             var elements: [Element] = []
             while try collectionHasMore(collectionID) {
@@ -276,7 +295,7 @@ public struct TestCase: ~Copyable {
         let size = try collectionSize(size, limitedTo: domain?.count)
         return try withCollection(
             label: UInt64(HEGEL_LABEL_SET.rawValue),
-            size: size
+            size: size,
         ) { collectionID in
             var values: Set<Element> = []
             var available = domain
@@ -308,7 +327,7 @@ public struct TestCase: ~Copyable {
         let size = try collectionSize(size, limitedTo: domain?.count)
         return try withCollection(
             label: UInt64(HEGEL_LABEL_MAP.rawValue),
-            size: size
+            size: size,
         ) { collectionID in
             var dictionary: [Key: Value] = [:]
             var available = domain
@@ -391,6 +410,32 @@ public struct TestCase: ~Copyable {
         }
     }
 
+    /// Creates a test-case handle with an independent deterministic choice stream.
+    ///
+    /// Clones share the test case's outcome and choice budget. Use one clone
+    /// per concurrent task, and finish every task before the property returns.
+    public func clone() throws(HegelError) -> sending TestCase {
+        var clone: OpaquePointer?
+        try context.check(
+            unsafe hegel_test_case_clone(
+                context.handle,
+                handle,
+                &clone,
+            )
+        )
+        guard let clone = unsafe clone else {
+            throw HegelError("Hegel returned an empty test-case clone.")
+        }
+        do {
+            // The C out-parameter obscures that libhegel returned a distinct handle.
+            nonisolated(unsafe) let testCase = try unsafe TestCase(handle: clone)
+            return unsafe testCase
+        } catch {
+            _ = unsafe hegel_test_case_free(context.handle, clone)
+            throw error
+        }
+    }
+
     private func withCollection<Result>(
         label: UInt64,
         size: ClosedRange<Int>,
@@ -457,7 +502,7 @@ private func unique<Value: Hashable>(_ values: [Value]) -> [Value] {
 
 private func collectionSize(
     _ size: ClosedRange<Int>,
-    limitedTo limit: Int?
+    limitedTo limit: Int?,
 ) throws -> ClosedRange<Int> {
     guard let limit else {
         return size

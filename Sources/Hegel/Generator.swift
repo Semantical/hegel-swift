@@ -208,6 +208,31 @@ extension Generator where Value == String {
     }
 }
 
+extension Generator where Value == Unicode.Scalar {
+    /// Generates arbitrary Unicode scalar values.
+    public static func unicodeScalars() -> Self {
+        let specification = Result {
+            try StringGeneratorHandle.text(size: 1...1)
+        }
+        return Self { testCase in
+            let string = try testCase.string(using: specification.get())
+            guard let scalar = string.unicodeScalars.first else {
+                throw HegelError("Hegel generated an empty Unicode scalar.")
+            }
+            return scalar
+        }
+    }
+}
+
+extension Generator where Value == Character {
+    /// Generates single-scalar characters.
+    public static func characters() -> Self {
+        Generator<Unicode.Scalar>.unicodeScalars().map {
+            Character(String($0))
+        }
+    }
+}
+
 // MARK: - Collections and products
 
 extension Generator {
