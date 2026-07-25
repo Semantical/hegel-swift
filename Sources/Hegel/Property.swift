@@ -156,7 +156,7 @@ struct Run: ~Copyable {
 /// escaping `property` mark that case as interesting. Hegel shrinks the case,
 /// then reports the native issue or rethrows the original error from its final
 /// replay.
-public func test(
+public func property(
     fileID: StaticString = #fileID,
     line: UInt = #line,
     _ property: (borrowing TestCase) async throws -> Void,

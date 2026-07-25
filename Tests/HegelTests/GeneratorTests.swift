@@ -44,7 +44,7 @@ struct GeneratorTests {
         let generator = Gen<Int>.oneOf(smallEvens, dependent)
             .optional(probabilityOfSome: 0.8)
 
-        try await Hegel.test { testCase in
+        try await property { testCase in
             guard let value = try testCase.draw(generator) else {
                 return
             }
@@ -65,7 +65,7 @@ struct GeneratorTests {
             )
         )
 
-        try await Hegel.test { testCase in
+        try await property { testCase in
             let tree = try testCase.draw(recursive)
             #expect(tree.leaves.allSatisfy { (10...20).contains($0) })
         }
@@ -73,7 +73,7 @@ struct GeneratorTests {
 
     @Test
     func `generates scalar values across their native ranges`() async throws {
-        try await Hegel.test { testCase in
+        try await property { testCase in
             let signed = try testCase.draw(Gen<Int8>.integers(in: -128 ... -100))
             let unsigned = try testCase.draw(
                 Gen<UInt64>.integers(in: (UInt64.max - 100)...UInt64.max)
@@ -102,7 +102,7 @@ struct GeneratorTests {
             of: .integers(in: 200...255)
         )
 
-        try await Hegel.test { testCase in
+        try await property { testCase in
             let bytes = try testCase.draw(Gen<[UInt8]>.bytes(size: 3...12))
             let (integer, string) = try testCase.draw(tuple)
             let character = try testCase.draw(Gen<Character>.characters())
@@ -120,7 +120,7 @@ struct GeneratorTests {
     func `draws unordered collections without replacement`() async throws {
         let keys = Gen<Int>.sampled(from: [1, 1, 2, 3])
 
-        try await Hegel.test { testCase in
+        try await property { testCase in
             let set = try testCase.draw(
                 Gen<Set<Int>>.sets(of: keys, size: 3...8)
             )
@@ -152,7 +152,7 @@ struct GeneratorTests {
             return value
         }
 
-        try await Hegel.test { testCase in
+        try await property { testCase in
             valueDraws.withLock { $0 = 0 }
             let dictionary = try testCase.draw(
                 Gen<[Int: Int]>.dictionaries(
@@ -179,7 +179,7 @@ struct GeneratorTests {
     func `shrinks collection structure and elements`() async throws {
         capturedArrayIssue.withLock { $0 = nil }
 
-        try await Hegel.test { testCase in
+        try await property { testCase in
             let values = try testCase.draw(
                 Gen<[Int]>.arrays(
                     of: .integers(in: 0...100),

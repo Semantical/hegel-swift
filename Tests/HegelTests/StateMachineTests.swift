@@ -20,7 +20,7 @@ private let capturedStateMachineIssue = Mutex<Issue?>(nil)
 
 @Test(.hegel(settings: stateMachineSettings))
 private func `requires a state machine for context-free pool operations`() async throws {
-    try await Hegel.test { ctx in
+    try await property { ctx in
         var values = Pool<Int>()
         #expect(throws: HegelError.self) {
             try values.add(1)
@@ -74,7 +74,7 @@ private struct PoolMachine: ~Copyable, StateMachine {
 
     @Test(.hegel(settings: stateMachineSettings))
     static func `tracks reusable and consumed values`() async throws {
-        try await Hegel.test { ctx in
+        try await property { ctx in
             try await ctx.run(Self())
         }
     }
@@ -105,7 +105,7 @@ private struct ShrinkingMachine: StateMachine {
     static func `shrinks rule sequences`() async throws {
         capturedStateMachineIssue.withLock { $0 = nil }
 
-        try await Hegel.test { ctx in
+        try await property { ctx in
             try await ctx.run(Self())
         }
 
@@ -150,7 +150,7 @@ private struct MacroPoolMachine: ~Copyable {
 
     @Test(.hegel(settings: stateMachineSettings))
     static func `derives state machine descriptors`() async throws {
-        try await Hegel.test { ctx in
+        try await property { ctx in
             try await ctx.run(Self())
         }
     }

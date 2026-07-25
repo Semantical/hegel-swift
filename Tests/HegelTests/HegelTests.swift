@@ -43,7 +43,7 @@ private var minimalIntegerComment: [Comment] {
 }
 
 private func runDatabaseProperty() async throws {
-    try await Hegel.test { testCase in
+    try await property { testCase in
         databasePropertyCalls.withLock { $0 += 1 }
         let value = try testCase.draw(.integers(in: 0...100))
         guard value < 5 else {
@@ -56,7 +56,7 @@ private func runDatabaseProperty() async throws {
 struct HegelTests {
     @Test
     func `draws structured values`() async throws {
-        try await Hegel.test { testCase in
+        try await property { testCase in
             let values = try testCase.draw(
                 .arrays(of: .integers(in: -10...10), size: 0...20)
             )
@@ -72,7 +72,7 @@ struct HegelTests {
 
     @Test
     func `rejects duplicate targeting labels`() async throws {
-        try await Hegel.test { testCase in
+        try await property { testCase in
             try testCase.target(1, label: "size")
             #expect(throws: HegelError.self) {
                 try testCase.target(2, label: "size")
@@ -93,7 +93,7 @@ struct HegelTests {
     func `shrinks thrown errors`() async throws {
         capturedErrorIssue.withLock { $0 = nil }
 
-        try await Hegel.test { testCase in
+        try await property { testCase in
             let value = try testCase.draw(.integers(in: 0...100))
             guard value < 5 else {
                 throw BoundaryFailure(value: value)
@@ -120,7 +120,7 @@ struct HegelTests {
     func `shrinks Swift Testing expectations`() async throws {
         capturedExpectationIssue.withLock { $0 = nil }
 
-        try await Hegel.test { testCase in
+        try await property { testCase in
             let value = try testCase.draw(.integers(in: 0...100))
             #expect(value < 5)
         }
@@ -133,7 +133,7 @@ struct HegelTests {
 
     @Test(.hegel(reproducing: minimalIntegerReproduction))
     func `replays an example configured by the trait`() async throws {
-        try await Hegel.test { testCase in
+        try await property { testCase in
             let value = try testCase.draw(.integers(in: 0...100))
             #expect(value == 5)
         }

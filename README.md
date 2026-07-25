@@ -9,7 +9,7 @@ import Testing
 
 @Test(.hegel)
 func sorting() async throws {
-    try await Hegel.test { ctx in
+    try await property { ctx in
         let values = try ctx.draw(.arrays(of: .integers()))
         #expect(values.sorted().count == values.count)
     }
@@ -70,7 +70,7 @@ struct TextMachine {
 
     @Test(.hegel)
     static func property() async throws {
-        try await Hegel.test { ctx in
+        try await property { ctx in
             try await ctx.run(Self())
         }
     }
