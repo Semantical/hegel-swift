@@ -4,7 +4,7 @@ An idiomatic Swift interface to [Hegel](https://github.com/hegeldev/hegel-rust),
 the property-based testing engine based on Hypothesis.
 
 ```swift
-import HegelTesting
+import Hegel
 import Testing
 
 @Test(.hegel)
@@ -15,6 +15,9 @@ func sorting() async throws {
     }
 }
 ```
+
+`property` runs inside a Swift Testing test with the `.hegel` trait, applied
+directly or inherited from a containing suite.
 
 Expectation failures produced while Hegel searches and shrinks are suppressed.
 Swift Testing reports the first expectation from the minimal counterexample with

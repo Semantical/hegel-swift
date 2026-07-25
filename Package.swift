@@ -21,10 +21,6 @@ var package = Package(
             name: "Hegel",
             targets: ["Hegel"],
         ),
-        .library(
-            name: "HegelTesting",
-            targets: ["HegelTesting"],
-        ),
     ],
     traits: [
         .default(enabledTraits: ["HegelMacros"]),
@@ -66,14 +62,9 @@ var package = Package(
             ],
             swiftSettings: swiftSettings,
         ),
-        .target(
-            name: "HegelTesting",
-            dependencies: ["Hegel"],
-            swiftSettings: swiftSettings,
-        ),
         .testTarget(
             name: "HegelTests",
-            dependencies: ["HegelTesting"],
+            dependencies: ["Hegel"],
             swiftSettings: swiftSettings,
         ),
         .testTarget(

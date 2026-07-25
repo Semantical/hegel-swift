@@ -1,6 +1,5 @@
 import Foundation
 import Hegel
-import HegelTesting
 import Synchronization
 import Testing
 
@@ -50,6 +49,14 @@ private func runDatabaseProperty() async throws {
             throw BoundaryFailure(value: value)
         }
     }
+}
+
+@Test
+func `property requires the Hegel trait`() async {
+    let error = await #expect(throws: HegelError.self) {
+        try await property { _ in }
+    }
+    #expect(error?.description == "`property` requires the `.hegel` trait.")
 }
 
 @Suite(.hegel(settings: deterministicSettings))

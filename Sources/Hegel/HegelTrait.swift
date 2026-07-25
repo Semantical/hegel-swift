@@ -1,4 +1,3 @@
-@_spi(HegelTesting) public import Hegel
 public import Testing
 
 private struct ParameterizedHegelTestError: Error, CustomStringConvertible {

@@ -1,15 +1,14 @@
 import Synchronization
 
-/// One exploration or replay attempt observed by a testing integration.
-@_spi(HegelTesting)
-public final class _HegelIssueContext: Sendable {
-    public enum Phase: Sendable {
+/// One exploration or replay attempt observed by Swift Testing.
+final class _HegelIssueContext: Sendable {
+    enum Phase: Sendable {
         case exploring
         case replaying(reproduction: String)
     }
 
-    public let phase: Phase
-    public let owner: _HegelErrorReporter?
+    let phase: Phase
+    let owner: _HegelErrorReporter?
     private let recorded = Atomic(false)
     private let stateMachineRules = Mutex<[String]?>(nil)
 
@@ -22,7 +21,7 @@ public final class _HegelIssueContext: Sendable {
     }
 
     /// Records an issue and returns whether it was the first for this attempt.
-    public func record() -> Bool {
+    func record() -> Bool {
         !recorded.exchange(true, ordering: .relaxed)
     }
 
@@ -39,31 +38,29 @@ public final class _HegelIssueContext: Sendable {
         stateMachineRules.withLock { $0?.append(name) }
     }
 
-    public var stateMachineRuleTrace: [String]? {
+    var stateMachineRuleTrace: [String]? {
         stateMachineRules.withLock { $0 }
     }
 }
 
-/// Dynamically scoped state shared by Hegel and an optional test integration.
-@_spi(HegelTesting)
-public struct _HegelScope: Sendable {
-    public var settings: Settings?
-    public var databaseKey: String?
-    public var reproduction: String?
-    public var errorReporter: _HegelErrorReporter?
-    public var issueContext: _HegelIssueContext?
+/// Dynamically scoped state shared by Hegel's Swift Testing integration.
+struct _HegelScope: Sendable {
+    var settings: Settings?
+    var databaseKey: String?
+    var reproduction: String?
+    var errorReporter: _HegelErrorReporter?
+    var issueContext: _HegelIssueContext?
     var poolTestCase: PoolTestCase?
 
     @TaskLocal
-    public static var current = Self()
+    static var current = Self()
 }
 
-/// Lets a testing integration turn a minimized error into its native issue.
-@_spi(HegelTesting)
-public final class _HegelErrorReporter: Sendable {
+/// Turns a minimized error into a native Swift Testing issue.
+final class _HegelErrorReporter: Sendable {
     private let report: @Sendable (any Error) -> Void
 
-    public init(_ report: @escaping @Sendable (any Error) -> Void) {
+    init(_ report: @escaping @Sendable (any Error) -> Void) {
         self.report = report
     }
 

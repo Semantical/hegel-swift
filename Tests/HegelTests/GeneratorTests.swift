@@ -1,5 +1,4 @@
 import Hegel
-import HegelTesting
 import Synchronization
 import Testing
 

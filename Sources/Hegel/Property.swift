@@ -1,4 +1,5 @@
 import CHegel
+import Testing
 
 struct FailureSnapshot {
     var origin: String
@@ -150,12 +151,12 @@ struct Run: ~Copyable {
     }
 }
 
-/// Searches for a counterexample to an async throwing property.
+/// Searches for a counterexample to an async throwing Swift Testing property.
 ///
 /// Draw values from the borrowed test case. Swift Testing issues and errors
 /// escaping `property` mark that case as interesting. Hegel shrinks the case,
 /// then reports the native issue or rethrows the original error from its final
-/// replay.
+/// replay. Apply the `.hegel` trait to the containing test or suite.
 public func property(
     fileID: StaticString = #fileID,
     line: UInt = #line,
@@ -163,11 +164,15 @@ public func property(
 ) async throws {
     let origin = "\(fileID):\(line)"
     let scope = _HegelScope.current
-    // Integrations provide their logical test identity. The call site keeps
-    // persistence available to standalone harnesses.
+    guard Test.current != nil else {
+        throw HegelError("`property` must be called from a Swift Testing test.")
+    }
+    guard let databaseKey = scope.databaseKey, scope.errorReporter != nil else {
+        throw HegelError("`property` requires the `.hegel` trait.")
+    }
     let settings = try CSettings(
         scope.settings ?? .init(),
-        databaseKey: scope.databaseKey ?? origin,
+        databaseKey: databaseKey,
     )
 
     if let reproduction = scope.reproduction {
