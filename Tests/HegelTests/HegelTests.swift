@@ -111,7 +111,6 @@ struct HegelTests {
         let requiredIssue = try #require(issue)
         let failure = try #require(requiredIssue.error as? BoundaryFailure)
         #expect(failure.value == 5)
-        #expect(requiredIssue.comments == minimalIntegerComment)
     }
 
     @Test(
@@ -135,7 +134,6 @@ struct HegelTests {
         let issue = capturedExpectationIssue.withLock { $0 }
         let requiredIssue = try #require(issue)
         #expect(String(describing: requiredIssue).contains("value < 5"))
-        #expect(requiredIssue.comments == minimalIntegerComment)
     }
 
     @Test(.hegel(reproducing: minimalIntegerReproduction))

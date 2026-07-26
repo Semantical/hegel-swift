@@ -36,7 +36,7 @@ private var generatorSettings: Settings {
     )
 }
 
-private let capturedArrayIssue = Mutex<Issue?>(nil)
+private let capturedArrayFailure = Mutex<ArrayLengthFailure?>(nil)
 
 @Suite(.hegel(settings: generatorSettings))
 struct GeneratorTests {
@@ -109,20 +109,12 @@ struct GeneratorTests {
             let upperBoundedInteger = try testCase.draw(.integers(in: ...10))
             let exclusiveUpperInteger = try testCase.draw(.integers(in: ..<10))
             let unsigned = try testCase.draw(
-                Gen<UInt64>.integers(in: (UInt64.max - 100)...UInt64.max)
+                .integers(UInt64.self, in: (UInt64.max - 100)...UInt64.max)
             )
-            let float = try testCase.draw(
-                Gen<Float>.floats(in: -10..<10)
-            )
-            let double = try testCase.draw(
-                Gen<Double>.floats(in: -10..<10)
-            )
-            let upperBoundedFloat = try testCase.draw(
-                Gen<Float>.floats(in: ...10)
-            )
-            let exclusiveUpperDouble = try testCase.draw(
-                Gen<Double>.floats(in: ..<10)
-            )
+            let float = try testCase.draw(.floats(in: -10..<10))
+            let double = try testCase.draw(.doubles(in: -10..<10))
+            let upperBoundedFloat = try testCase.draw(.floats(in: ...10))
+            let exclusiveUpperDouble = try testCase.draw(.doubles(in: ..<10))
 
             #expect((-128 ... -100).contains(signed))
             #expect((-10..<10).contains(halfOpenInteger))
@@ -140,7 +132,7 @@ struct GeneratorTests {
     @Test
     func `generates bytes strings characters and fixed products`() async throws {
         let tuple = Gen<(UInt8, String)>.tuple(
-            Gen<UInt8>.integers(in: 200...255),
+            Gen.integers(UInt8.self, in: 200...255),
             .strings(size: ...8),
         )
         let inlineArray = Gen<[4 of UInt8]>.inlineArrays(
@@ -233,16 +225,16 @@ struct GeneratorTests {
 
     @Test(
         .compactMapIssues { issue in
-            guard issue.error is ArrayLengthFailure else {
+            guard let failure = issue.error as? ArrayLengthFailure else {
                 return issue
             }
-            capturedArrayIssue.withLock { $0 = issue }
+            capturedArrayFailure.withLock { $0 = failure }
             return nil
         },
         .hegel,
     )
     func `shrinks collection structure and elements`() async throws {
-        capturedArrayIssue.withLock { $0 = nil }
+        capturedArrayFailure.withLock { $0 = nil }
 
         try await property { testCase in
             let values = try testCase.draw(
@@ -253,8 +245,7 @@ struct GeneratorTests {
             }
         }
 
-        let issue = try #require(capturedArrayIssue.withLock { $0 })
-        let failure = try #require(issue.error as? ArrayLengthFailure)
+        let failure = try #require(capturedArrayFailure.withLock { $0 })
         #expect(failure.values == [0, 0])
     }
 }

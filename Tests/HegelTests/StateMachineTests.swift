@@ -6,6 +6,11 @@ private struct StateMachineFailure: Error {
     var steps: Int
 }
 
+private struct CapturedStateMachineFailure {
+    var issue: Issue
+    var failure: StateMachineFailure
+}
+
 private var stateMachineSettings: Settings {
     Settings(
         testCases: 200,
@@ -15,7 +20,7 @@ private var stateMachineSettings: Settings {
     )
 }
 
-private let capturedStateMachineIssue = Mutex<Issue?>(nil)
+private let capturedStateMachineFailure = Mutex<CapturedStateMachineFailure?>(nil)
 
 @Test(.hegel(settings: stateMachineSettings))
 private func `requires a state machine for context-free pool operations`() async throws {
@@ -93,26 +98,27 @@ private struct ShrinkingMachine: StateMachine {
 
     @Test(
         .compactMapIssues { issue in
-            guard issue.error is StateMachineFailure else {
+            guard let failure = issue.error as? StateMachineFailure else {
                 return issue
             }
-            capturedStateMachineIssue.withLock { $0 = issue }
+            capturedStateMachineFailure.withLock {
+                $0 = CapturedStateMachineFailure(issue: issue, failure: failure)
+            }
             return nil
         },
         .hegel(settings: stateMachineSettings),
     )
     static func `shrinks rule sequences`() async throws {
-        capturedStateMachineIssue.withLock { $0 = nil }
+        capturedStateMachineFailure.withLock { $0 = nil }
 
         try await property { ctx in
             try await ctx.run(Self())
         }
 
-        let issue = try #require(capturedStateMachineIssue.withLock { $0 })
-        let failure = try #require(issue.error as? StateMachineFailure)
-        #expect(failure.steps == 3)
+        let captured = try #require(capturedStateMachineFailure.withLock { $0 })
+        #expect(captured.failure.steps == 3)
         #expect(
-            issue.comments.last == """
+            captured.issue.comments.last == """
                 Hegel state machine:
                 Step 1: increment
                 Step 2: increment

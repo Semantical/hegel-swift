@@ -160,6 +160,11 @@ extension Gen where Value: FixedWidthInteger {
         integers(in: Value.min...Value.max)
     }
 
+    /// Generates integers of the given type across its full range.
+    public static func integers(_: Value.Type) -> Self {
+        integers
+    }
+
     /// Generates integers within the given bounds.
     public static func integers(in range: some RangeBounds<Value>) -> Self {
         let minimum = inclusiveLowerBound(range.lowerEndpoint, default: Value.min)
@@ -168,6 +173,21 @@ extension Gen where Value: FixedWidthInteger {
         return .unspanned { testCase in
             try testCase.integer(in: minimum...maximum)
         }
+    }
+
+    /// Generates integers of the given type within the given bounds.
+    public static func integers<Bounds>(
+        _: Value.Type,
+        in range: Bounds,
+    ) -> Self where Bounds: RangeBounds<Value> {
+        integers(in: range)
+    }
+}
+
+extension Gen where Value == Int {
+    /// Generates integers across `Int`'s full range.
+    public static var integers: Self {
+        integers(in: Int.min...Int.max)
     }
 }
 
@@ -225,12 +245,12 @@ extension Gen where Value == Float {
 
 extension Gen where Value == Double {
     /// Generates floating-point values, including special values.
-    public static var floats: Self {
-        floats()
+    public static var doubles: Self {
+        doubles()
     }
 
     /// Generates floating-point values within the given bounds.
-    public static func floats(
+    public static func doubles(
         in range: some RangeBounds<Double> = -.infinity ... .infinity,
         allowingNaN: Bool? = nil,
         allowingInfinity: Bool? = nil,
