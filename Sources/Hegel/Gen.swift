@@ -1,5 +1,8 @@
 import CHegel
 
+// "SWIFT" followed by 1, reserved for custom generator spans.
+private let compositeSpanLabel: UInt64 = 0x5357494654_01
+
 /// A value recipe drawn and shrunk by Hegel.
 public struct Gen<Value> {
     var draw: (borrowing TestCase) throws -> Value
@@ -12,7 +15,11 @@ public struct Gen<Value> {
     public init(
         _ draw: @escaping (borrowing TestCase) throws -> Value
     ) {
-        self.init(enumeratedValues: nil, draw: draw)
+        self.init(enumeratedValues: nil) { testCase in
+            try testCase.withSpan(label: compositeSpanLabel) {
+                try draw(testCase)
+            }
+        }
     }
 
     init(
@@ -21,6 +28,12 @@ public struct Gen<Value> {
     ) {
         self.draw = draw
         self.enumeratedValues = enumeratedValues
+    }
+
+    static func unspanned(
+        _ draw: @escaping (borrowing TestCase) throws -> Value
+    ) -> Self {
+        Self(enumeratedValues: nil, draw: draw)
     }
 }
 
@@ -37,7 +50,7 @@ extension Gen {
         let values = Array(values)
         precondition(!values.isEmpty)
         return Self(enumeratedValues: values) { testCase in
-            try testCase.withSpan(label: UInt64(HEGEL_LABEL_SAMPLED_FROM.rawValue)) {
+            try testCase.withSpan(label: HEGEL_LABEL_SAMPLED_FROM) {
                 let index = try testCase.integer(in: 0...(values.count - 1))
                 return values[index]
             }
@@ -58,7 +71,7 @@ extension Gen {
             ? domains.flatMap { $0 }
             : nil
         return Self(enumeratedValues: enumeratedValues) { testCase in
-            try testCase.withSpan(label: UInt64(HEGEL_LABEL_ONE_OF.rawValue)) {
+            try testCase.withSpan(label: HEGEL_LABEL_ONE_OF) {
                 let index = try testCase.integer(in: 0...(generators.count - 1))
                 return try generators[index].draw(testCase)
             }
@@ -80,7 +93,7 @@ extension Gen {
         Gen<NewValue>(
             enumeratedValues: try? enumeratedValues?.map(transform)
         ) { testCase in
-            try testCase.withSpan(label: UInt64(HEGEL_LABEL_MAPPED.rawValue)) {
+            try testCase.withSpan(label: HEGEL_LABEL_MAPPED) {
                 try transform(draw(testCase))
             }
         }
@@ -90,8 +103,8 @@ extension Gen {
     public func flatMap<NewValue>(
         _ transform: @escaping (Value) throws -> Gen<NewValue>
     ) -> Gen<NewValue> {
-        Gen<NewValue> { testCase in
-            try testCase.withSpan(label: UInt64(HEGEL_LABEL_FLAT_MAP.rawValue)) {
+        .unspanned { testCase in
+            try testCase.withSpan(label: HEGEL_LABEL_FLAT_MAP) {
                 let generator = try transform(draw(testCase))
                 return try generator.draw(testCase)
             }
@@ -111,7 +124,7 @@ extension Gen {
             }
             return .sampled(from: enumeratedValues)
         }
-        return Self { testCase in
+        return .unspanned { testCase in
             try testCase.filtered(self, by: predicate)
         }
     }
@@ -122,7 +135,7 @@ extension Gen {
         return Gen<Value?>(
             enumeratedValues: enumeratedValues.map { [nil] + $0.map(Optional.some) }
         ) { testCase in
-            try testCase.withSpan(label: UInt64(HEGEL_LABEL_OPTIONAL.rawValue)) {
+            try testCase.withSpan(label: HEGEL_LABEL_OPTIONAL) {
                 guard try testCase.boolean(probability: probability) else {
                     return nil
                 }
@@ -152,7 +165,7 @@ extension Gen where Value: FixedWidthInteger {
         let minimum = inclusiveLowerBound(range.lowerEndpoint, default: Value.min)
         let maximum = inclusiveUpperBound(range.upperEndpoint) ?? Value.max
         precondition(minimum <= maximum)
-        return Self { testCase in
+        return .unspanned { testCase in
             try testCase.integer(in: minimum...maximum)
         }
     }
@@ -196,7 +209,7 @@ extension Gen where Value == Float {
             minimum < maximum
                 || (lower?.isInclusive != false && upper?.isInclusive != false)
         )
-        return Self { testCase in
+        return .unspanned { testCase in
             try testCase.float(
                 minimum: minimum,
                 maximum: maximum,
@@ -233,7 +246,7 @@ extension Gen where Value == Double {
             minimum < maximum
                 || (lower?.isInclusive != false && upper?.isInclusive != false)
         )
-        return Self { testCase in
+        return .unspanned { testCase in
             try testCase.float(
                 minimum: minimum,
                 maximum: maximum,
@@ -260,7 +273,7 @@ extension Gen where Value == [UInt8] {
 
     private static func bytes(size: ValidatedSizeBounds) -> Self {
         let size = size.resolvedForDirectGeneration()
-        return Self { testCase in
+        return .unspanned { testCase in
             try testCase.bytes(size: size)
         }
     }
@@ -282,7 +295,7 @@ extension Gen where Value == String {
         let specification = Result {
             try StringGeneratorHandle.text(size: size)
         }
-        return Self { testCase in
+        return .unspanned { testCase in
             try testCase.string(using: specification.get())
         }
     }
@@ -294,7 +307,7 @@ extension Gen where Value == Unicode.Scalar {
         let specification = Result {
             try StringGeneratorHandle.text(size: 1...1)
         }
-        return Self { testCase in
+        return .unspanned { testCase in
             let string = try testCase.string(using: specification.get())
             guard let scalar = string.unicodeScalars.first else {
                 throw HegelError("Hegel generated an empty Unicode scalar.")
@@ -335,7 +348,7 @@ extension Gen {
         of element: Gen<Element>,
         size: ValidatedSizeBounds,
     ) -> Self where Value == [Element] {
-        Self { testCase in
+        .unspanned { testCase in
             try testCase.array(of: element, size: size)
         }
     }
@@ -344,8 +357,8 @@ extension Gen {
     public static func inlineArrays<let count: Int, Element>(
         of element: Gen<Element>
     ) -> Self where Value == [count of Element] {
-        Self { testCase in
-            try testCase.withSpan(label: UInt64(HEGEL_LABEL_TUPLE.rawValue)) {
+        .unspanned { testCase in
+            try testCase.withSpan(label: HEGEL_LABEL_TUPLE) {
                 try [count of Element] { _ in
                     try element.draw(testCase)
                 }
@@ -372,7 +385,7 @@ extension Gen {
         of element: Gen<Element>,
         size: ValidatedSizeBounds,
     ) -> Self where Value == Set<Element> {
-        Self { testCase in
+        .unspanned { testCase in
             try testCase.set(of: element, size: size)
         }
     }
@@ -403,7 +416,7 @@ extension Gen {
         values: Gen<Element>,
         size: ValidatedSizeBounds,
     ) -> Self where Value == [Key: Element] {
-        Self { testCase in
+        .unspanned { testCase in
             try testCase.dictionary(keys: keys, values: values, size: size)
         }
     }
@@ -412,8 +425,8 @@ extension Gen {
     public static func tuple<each Element>(
         _ elements: repeat Gen<each Element>
     ) -> Self where Value == (repeat each Element) {
-        Self { testCase in
-            try testCase.withSpan(label: UInt64(HEGEL_LABEL_TUPLE.rawValue)) {
+        .unspanned { testCase in
+            try testCase.withSpan(label: HEGEL_LABEL_TUPLE) {
                 (repeat try (each elements).draw(testCase))
             }
         }

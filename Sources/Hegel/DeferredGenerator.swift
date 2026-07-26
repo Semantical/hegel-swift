@@ -1,5 +1,6 @@
 /// A single-assignment generator definition for recursive generator graphs.
 struct DeferredGeneratorDefinition<Value>: ~Copyable {
+    // could use UniqueBox instead if it weren't for its platform requirements
     private final class Storage {
         var implementation: Gen<Value>?
     }
@@ -15,7 +16,7 @@ struct DeferredGeneratorDefinition<Value>: ~Copyable {
     /// Any number of handles may be created before calling ``set(_:)``.
     /// Drawing from one before the definition is completed is a programmer error.
     var generator: Gen<Value> {
-        Gen { [storage] testCase in
+        .unspanned { [storage] testCase in
             guard let implementation = storage.implementation else {
                 preconditionFailure("deferred generator was drawn before being set")
             }

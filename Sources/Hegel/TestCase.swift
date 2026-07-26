@@ -283,7 +283,7 @@ public struct TestCase: ~Copyable {
             var elements: [Element] = []
             while try collectionHasMore(collectionID) {
                 let value = try withSpan(
-                    label: UInt64(HEGEL_LABEL_LIST_ELEMENT.rawValue)
+                    label: HEGEL_LABEL_LIST_ELEMENT
                 ) {
                     try element.draw(self)
                 }
@@ -307,7 +307,7 @@ public struct TestCase: ~Copyable {
             var available = domain
             while try collectionHasMore(collectionID) {
                 let candidate = try withSpan(
-                    label: UInt64(HEGEL_LABEL_SET_ELEMENT.rawValue)
+                    label: HEGEL_LABEL_SET_ELEMENT
                 ) {
                     if let count = available?.count {
                         let index = try integer(in: 0...(count - 1))
@@ -381,6 +381,13 @@ public struct TestCase: ~Copyable {
             }
             return dictionary
         }
+    }
+
+    func withSpan<Result>(
+        label: hegel_label_t,
+        _ body: () throws -> Result,
+    ) throws -> Result {
+        try withSpan(label: UInt64(label.rawValue), body)
     }
 
     func withSpan<Result>(
