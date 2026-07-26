@@ -145,22 +145,25 @@ public struct TestCase: ~Copyable {
     }
 
     func float(
-        in range: ClosedRange<Float>?,
+        minimum: Float,
+        maximum: Float,
         allowingNaN: Bool,
         allowingInfinity: Bool,
         allowingSubnormal: Bool,
+        excludingMinimum: Bool = false,
+        excludingMaximum: Bool = false,
     ) throws -> Float {
         var value = 0.0
         let result = unsafe hegel_generate_float(
             context.handle,
             handle,
             32,
-            Double(range?.lowerBound ?? -.infinity),
-            Double(range?.upperBound ?? .infinity),
+            Double(minimum),
+            Double(maximum),
             allowingNaN,
             allowingInfinity,
-            false,
-            false,
+            excludingMinimum,
+            excludingMaximum,
             Double(allowingSubnormal ? Float.leastNonzeroMagnitude : Float.leastNormalMagnitude),
             &value,
         )
@@ -169,22 +172,25 @@ public struct TestCase: ~Copyable {
     }
 
     func float(
-        in range: ClosedRange<Double>?,
+        minimum: Double,
+        maximum: Double,
         allowingNaN: Bool,
         allowingInfinity: Bool,
         allowingSubnormal: Bool,
+        excludingMinimum: Bool = false,
+        excludingMaximum: Bool = false,
     ) throws -> Double {
         var value = 0.0
         let result = unsafe hegel_generate_float(
             context.handle,
             handle,
             64,
-            range?.lowerBound ?? -.infinity,
-            range?.upperBound ?? .infinity,
+            minimum,
+            maximum,
             allowingNaN,
             allowingInfinity,
-            false,
-            false,
+            excludingMinimum,
+            excludingMaximum,
             allowingSubnormal ? Double.leastNonzeroMagnitude : Double.leastNormalMagnitude,
             &value,
         )
@@ -268,7 +274,7 @@ public struct TestCase: ~Copyable {
 
     func array<Element>(
         of element: Gen<Element>,
-        size: ClosedRange<Int>,
+        size: ValidatedSizeBounds,
     ) throws -> [Element] {
         try withCollection(
             label: UInt64(HEGEL_LABEL_LIST.rawValue),
@@ -289,7 +295,7 @@ public struct TestCase: ~Copyable {
 
     func set<Element>(
         of element: Gen<Element>,
-        size: ClosedRange<Int>,
+        size: ValidatedSizeBounds,
     ) throws -> Set<Element> {
         let domain = element.enumeratedValues.map(unique)
         let size = try collectionSize(size, limitedTo: domain?.count)
@@ -321,7 +327,7 @@ public struct TestCase: ~Copyable {
     func dictionary<Key, Value>(
         keys: Gen<Key>,
         values: Gen<Value>,
-        size: ClosedRange<Int>,
+        size: ValidatedSizeBounds,
     ) throws -> [Key: Value] {
         let domain = keys.enumeratedValues.map(unique)
         let size = try collectionSize(size, limitedTo: domain?.count)
@@ -438,7 +444,7 @@ public struct TestCase: ~Copyable {
 
     private func withCollection<Result>(
         label: UInt64,
-        size: ClosedRange<Int>,
+        size: ValidatedSizeBounds,
         _ body: (Int64) throws -> Result,
     ) throws -> Result {
         try withSpan(label: label) {
@@ -447,8 +453,8 @@ public struct TestCase: ~Copyable {
                 unsafe hegel_new_collection(
                     context.handle,
                     handle,
-                    UInt64(size.lowerBound),
-                    UInt64(size.upperBound),
+                    UInt64(size.minimum),
+                    size.cMaximum,
                     &collectionID,
                 )
             )
@@ -501,14 +507,17 @@ private func unique<Value: Hashable>(_ values: [Value]) -> [Value] {
 }
 
 private func collectionSize(
-    _ size: ClosedRange<Int>,
+    _ size: ValidatedSizeBounds,
     limitedTo limit: Int?,
-) throws -> ClosedRange<Int> {
+) throws -> ValidatedSizeBounds {
     guard let limit else {
         return size
     }
-    guard size.lowerBound <= limit else {
+    guard size.minimum <= limit else {
         throw TestControl.invalid
     }
-    return size.lowerBound...min(size.upperBound, limit)
+    return ValidatedSizeBounds(
+        minimum: size.minimum,
+        maximum: min(size.maximum ?? limit, limit),
+    )
 }

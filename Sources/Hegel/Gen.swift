@@ -125,12 +125,18 @@ extension Gen {
 // MARK: - Scalar values
 
 extension Gen where Value: FixedWidthInteger {
-    /// Generates integers within a closed range.
-    public static func integers(
-        in range: ClosedRange<Value> = Value.min...Value.max
-    ) -> Self {
-        Self { testCase in
-            try testCase.integer(in: range)
+    /// Generates integers across the type's full range.
+    public static func integers() -> Self {
+        integers(in: Value.min...Value.max)
+    }
+
+    /// Generates integers within the given bounds.
+    public static func integers(in range: some RangeBounds<Value>) -> Self {
+        let minimum = inclusiveLowerBound(range.lowerEndpoint, default: Value.min)
+        let maximum = inclusiveUpperBound(range.upperEndpoint) ?? Value.max
+        precondition(minimum <= maximum)
+        return Self { testCase in
+            try testCase.integer(in: minimum...maximum)
         }
     }
 }
@@ -148,17 +154,47 @@ extension Gen where Value == Bool {
 extension Gen where Value == Float {
     /// Generates floating-point values, including special values when unbounded.
     public static func floats(
-        in range: ClosedRange<Float>? = nil,
         allowingNaN: Bool? = nil,
         allowingInfinity: Bool? = nil,
         allowingSubnormal: Bool = true,
     ) -> Self {
         Self { testCase in
             try testCase.float(
-                in: range,
-                allowingNaN: allowingNaN ?? (range == nil),
-                allowingInfinity: allowingInfinity ?? (range == nil),
+                minimum: -.infinity,
+                maximum: .infinity,
+                allowingNaN: allowingNaN ?? true,
+                allowingInfinity: allowingInfinity ?? true,
                 allowingSubnormal: allowingSubnormal,
+            )
+        }
+    }
+
+    /// Generates floating-point values within the given bounds.
+    public static func floats(
+        in range: some RangeBounds<Float>,
+        allowingNaN: Bool? = nil,
+        allowingInfinity: Bool? = nil,
+        allowingSubnormal: Bool = true,
+    ) -> Self {
+        let lower = range.lowerEndpoint
+        let upper = range.upperEndpoint
+        let minimum = lower?.value ?? -.infinity
+        let maximum = upper?.value ?? .infinity
+        precondition(!minimum.isNaN && !maximum.isNaN)
+        precondition(minimum <= maximum)
+        precondition(
+            minimum < maximum
+                || (lower?.isInclusive != false && upper?.isInclusive != false)
+        )
+        return Self { testCase in
+            try testCase.float(
+                minimum: minimum,
+                maximum: maximum,
+                allowingNaN: allowingNaN ?? false,
+                allowingInfinity: allowingInfinity ?? (lower == nil || upper == nil),
+                allowingSubnormal: allowingSubnormal,
+                excludingMinimum: lower?.isInclusive == false,
+                excludingMaximum: upper?.isInclusive == false,
             )
         }
     }
@@ -167,26 +203,65 @@ extension Gen where Value == Float {
 extension Gen where Value == Double {
     /// Generates floating-point values, including special values when unbounded.
     public static func floats(
-        in range: ClosedRange<Double>? = nil,
         allowingNaN: Bool? = nil,
         allowingInfinity: Bool? = nil,
         allowingSubnormal: Bool = true,
     ) -> Self {
         Self { testCase in
             try testCase.float(
-                in: range,
-                allowingNaN: allowingNaN ?? (range == nil),
-                allowingInfinity: allowingInfinity ?? (range == nil),
+                minimum: -.infinity,
+                maximum: .infinity,
+                allowingNaN: allowingNaN ?? true,
+                allowingInfinity: allowingInfinity ?? true,
                 allowingSubnormal: allowingSubnormal,
+            )
+        }
+    }
+
+    /// Generates floating-point values within the given bounds.
+    public static func floats(
+        in range: some RangeBounds<Double>,
+        allowingNaN: Bool? = nil,
+        allowingInfinity: Bool? = nil,
+        allowingSubnormal: Bool = true,
+    ) -> Self {
+        let lower = range.lowerEndpoint
+        let upper = range.upperEndpoint
+        let minimum = lower?.value ?? -.infinity
+        let maximum = upper?.value ?? .infinity
+        precondition(!minimum.isNaN && !maximum.isNaN)
+        precondition(minimum <= maximum)
+        precondition(
+            minimum < maximum
+                || (lower?.isInclusive != false && upper?.isInclusive != false)
+        )
+        return Self { testCase in
+            try testCase.float(
+                minimum: minimum,
+                maximum: maximum,
+                allowingNaN: allowingNaN ?? false,
+                allowingInfinity: allowingInfinity ?? (lower == nil || upper == nil),
+                allowingSubnormal: allowingSubnormal,
+                excludingMinimum: lower?.isInclusive == false,
+                excludingMaximum: upper?.isInclusive == false,
             )
         }
     }
 }
 
 extension Gen where Value == [UInt8] {
-    /// Generates byte strings whose sizes fall within the given range.
-    public static func bytes(size: ClosedRange<Int> = 0...10) -> Self {
-        validate(size: size)
+    /// Generates byte strings using Hegel's default size budget.
+    public static func bytes() -> Self {
+        bytes(size: ValidatedSizeBounds())
+    }
+
+    /// Generates byte strings whose sizes fall within the given bounds.
+    public static func bytes(size: some RangeBounds<Int>) -> Self {
+        bytes(size: ValidatedSizeBounds(size))
+    }
+
+    private static func bytes(size: ValidatedSizeBounds) -> Self {
+        let size = size.resolvedForDirectGeneration()
         return Self { testCase in
             try testCase.bytes(size: size)
         }
@@ -194,9 +269,18 @@ extension Gen where Value == [UInt8] {
 }
 
 extension Gen where Value == String {
-    /// Generates Unicode strings whose scalar counts fall within the given range.
-    public static func strings(size: ClosedRange<Int> = 0...10) -> Self {
-        validate(size: size)
+    /// Generates Unicode strings using Hegel's default size budget.
+    public static func strings() -> Self {
+        strings(size: ValidatedSizeBounds())
+    }
+
+    /// Generates Unicode strings whose scalar counts fall within the given bounds.
+    public static func strings(size: some RangeBounds<Int>) -> Self {
+        strings(size: ValidatedSizeBounds(size))
+    }
+
+    private static func strings(size: ValidatedSizeBounds) -> Self {
+        let size = size.resolvedForDirectGeneration()
         let specification = Result {
             try StringGeneratorHandle.text(size: size)
         }
@@ -234,13 +318,26 @@ extension Gen where Value == Character {
 // MARK: - Collections and products
 
 extension Gen {
-    /// Generates arrays whose elements are drawn from another generator.
+    /// Generates arrays whose sizes are chosen by Hegel.
+    public static func arrays<Element>(
+        of element: Gen<Element>
+    ) -> Self where Value == [Element] {
+        arrays(of: element, size: ValidatedSizeBounds())
+    }
+
+    /// Generates arrays whose sizes fall within the given bounds.
     public static func arrays<Element>(
         of element: Gen<Element>,
-        size: ClosedRange<Int> = 0...10,
+        size: some RangeBounds<Int>,
     ) -> Self where Value == [Element] {
-        validate(size: size)
-        return Self { testCase in
+        arrays(of: element, size: ValidatedSizeBounds(size))
+    }
+
+    private static func arrays<Element>(
+        of element: Gen<Element>,
+        size: ValidatedSizeBounds,
+    ) -> Self where Value == [Element] {
+        Self { testCase in
             try testCase.array(of: element, size: size)
         }
     }
@@ -258,25 +355,57 @@ extension Gen {
         }
     }
 
-    /// Generates sets whose elements are drawn from another generator.
+    /// Generates sets whose sizes are chosen by Hegel.
+    public static func sets<Element>(
+        of element: Gen<Element>
+    ) -> Self where Value == Set<Element> {
+        sets(of: element, size: ValidatedSizeBounds())
+    }
+
+    /// Generates sets whose sizes fall within the given bounds.
     public static func sets<Element>(
         of element: Gen<Element>,
-        size: ClosedRange<Int> = 0...10,
+        size: some RangeBounds<Int>,
     ) -> Self where Value == Set<Element> {
-        validate(size: size)
-        return Self { testCase in
+        sets(of: element, size: ValidatedSizeBounds(size))
+    }
+
+    private static func sets<Element>(
+        of element: Gen<Element>,
+        size: ValidatedSizeBounds,
+    ) -> Self where Value == Set<Element> {
+        Self { testCase in
             try testCase.set(of: element, size: size)
         }
     }
 
-    /// Generates dictionaries from separate key and value generators.
+    /// Generates dictionaries whose sizes are chosen by Hegel.
     public static func dictionaries<Key, Element>(
         keys: Gen<Key>,
         values: Gen<Element>,
-        size: ClosedRange<Int> = 0...10,
     ) -> Self where Value == [Key: Element] {
-        validate(size: size)
-        return Self { testCase in
+        dictionaries(keys: keys, values: values, size: ValidatedSizeBounds())
+    }
+
+    /// Generates dictionaries whose sizes fall within the given bounds.
+    public static func dictionaries<Key, Element>(
+        keys: Gen<Key>,
+        values: Gen<Element>,
+        size: some RangeBounds<Int>,
+    ) -> Self where Value == [Key: Element] {
+        dictionaries(
+            keys: keys,
+            values: values,
+            size: ValidatedSizeBounds(size),
+        )
+    }
+
+    private static func dictionaries<Key, Element>(
+        keys: Gen<Key>,
+        values: Gen<Element>,
+        size: ValidatedSizeBounds,
+    ) -> Self where Value == [Key: Element] {
+        Self { testCase in
             try testCase.dictionary(keys: keys, values: values, size: size)
         }
     }
@@ -291,8 +420,4 @@ extension Gen {
             }
         }
     }
-}
-
-private func validate(size: ClosedRange<Int>) {
-    precondition(size.lowerBound >= 0)
 }

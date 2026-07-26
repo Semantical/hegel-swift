@@ -73,21 +73,37 @@ struct GeneratorTests {
     @Test
     func `generates scalar values across their native ranges`() async throws {
         try await property { testCase in
-            let signed = try testCase.draw(Gen<Int8>.integers(in: -128 ... -100))
+            let signed = try testCase.draw(.integers(in: -128 ... -100))
+            let halfOpenInteger = try testCase.draw(.integers(in: -10..<10))
+            let lowerBoundedInteger = try testCase.draw(.integers(in: 10...))
+            let upperBoundedInteger = try testCase.draw(.integers(in: ...10))
+            let exclusiveUpperInteger = try testCase.draw(.integers(in: ..<10))
             let unsigned = try testCase.draw(
                 Gen<UInt64>.integers(in: (UInt64.max - 100)...UInt64.max)
             )
             let float = try testCase.draw(
-                Gen<Float>.floats(in: -10...10)
+                Gen<Float>.floats(in: -10..<10)
             )
             let double = try testCase.draw(
-                Gen<Double>.floats(in: -10...10)
+                Gen<Double>.floats(in: -10..<10)
+            )
+            let upperBoundedFloat = try testCase.draw(
+                Gen<Float>.floats(in: ...10)
+            )
+            let exclusiveUpperDouble = try testCase.draw(
+                Gen<Double>.floats(in: ..<10)
             )
 
             #expect((-128 ... -100).contains(signed))
+            #expect((-10..<10).contains(halfOpenInteger))
+            #expect(lowerBoundedInteger >= 10)
+            #expect(upperBoundedInteger <= 10)
+            #expect(exclusiveUpperInteger < 10)
             #expect(((UInt64.max - 100)...UInt64.max).contains(unsigned))
-            #expect((-10...10).contains(float))
-            #expect((-10...10).contains(double))
+            #expect((-10..<10).contains(float))
+            #expect((-10..<10).contains(double))
+            #expect(upperBoundedFloat <= 10)
+            #expect(exclusiveUpperDouble < 10)
         }
     }
 
@@ -95,23 +111,48 @@ struct GeneratorTests {
     func `generates bytes strings characters and fixed products`() async throws {
         let tuple = Gen<(UInt8, String)>.tuple(
             Gen<UInt8>.integers(in: 200...255),
-            .strings(size: 2...8),
+            .strings(size: ...8),
         )
-        let inlineArray = Gen<InlineArray<4, UInt8>>.inlineArrays(
+        let inlineArray = Gen<[4 of UInt8]>.inlineArrays(
             of: .integers(in: 200...255)
         )
 
         try await property { testCase in
-            let bytes = try testCase.draw(Gen<[UInt8]>.bytes(size: 3...12))
+            let bytes = try testCase.draw(.bytes(size: ..<13))
             let (integer, string) = try testCase.draw(tuple)
-            let character = try testCase.draw(Gen<Character>.characters())
+            let character = try testCase.draw(.characters())
             let fixed = try testCase.draw(inlineArray)
 
-            #expect((3...12).contains(bytes.count))
+            #expect(bytes.count < 13)
             #expect((200...255).contains(integer))
-            #expect((2...8).contains(string.unicodeScalars.count))
+            #expect(string.unicodeScalars.count <= 8)
             #expect(character.unicodeScalars.count == 1)
             #expect(fixed.indices.allSatisfy { (200...255).contains(fixed[$0]) })
+        }
+    }
+
+    @Test
+    func `supports lower bounded generator sizes`() async throws {
+        let keys = Gen<Int>.sampled(from: 0..<20)
+
+        try await property { testCase in
+            let bytes = try testCase.draw(.bytes(size: 11...))
+            let string = try testCase.draw(.strings(size: 11...))
+            let array = try testCase.draw(.arrays(of: .booleans(), size: 11...))
+            let set = try testCase.draw(.sets(of: keys, size: 11...))
+            let dictionary = try testCase.draw(
+                .dictionaries(
+                    keys: keys,
+                    values: .booleans(),
+                    size: 11...,
+                )
+            )
+
+            #expect(bytes.count >= 11)
+            #expect(string.unicodeScalars.count >= 11)
+            #expect(array.count >= 11)
+            #expect(set.count >= 11)
+            #expect(dictionary.count >= 11)
         }
     }
 
@@ -120,21 +161,16 @@ struct GeneratorTests {
         let keys = Gen<Int>.sampled(from: [1, 1, 2, 3])
 
         try await property { testCase in
-            let set = try testCase.draw(
-                Gen<Set<Int>>.sets(of: keys, size: 3...8)
-            )
+            let set = try testCase.draw(.sets(of: keys, size: 3..<9))
             let dictionary = try testCase.draw(
-                Gen<[Int: Bool]>.dictionaries(
+                .dictionaries(
                     keys: keys,
                     values: .booleans(),
-                    size: 3...8,
+                    size: 3..<9,
                 )
             )
             let generatedSet = try testCase.draw(
-                Gen<Set<Int>>.sets(
-                    of: .integers(in: 1...3),
-                    size: 3...3,
-                )
+                .sets(of: .integers(in: 1...3), size: 3...3)
             )
 
             #expect(set == [1, 2, 3])
@@ -154,7 +190,7 @@ struct GeneratorTests {
         try await property { testCase in
             valueDraws.withLock { $0 = 0 }
             let dictionary = try testCase.draw(
-                Gen<[Int: Int]>.dictionaries(
+                .dictionaries(
                     keys: .integers(in: 0...0),
                     values: values,
                     size: 1...3,
@@ -180,10 +216,7 @@ struct GeneratorTests {
 
         try await property { testCase in
             let values = try testCase.draw(
-                Gen<[Int]>.arrays(
-                    of: .integers(in: 0...100),
-                    size: 0...10,
-                )
+                .arrays(of: .integers(in: 0...100), size: 0...10)
             )
             guard values.count < 2 else {
                 throw ArrayLengthFailure(values: values)
