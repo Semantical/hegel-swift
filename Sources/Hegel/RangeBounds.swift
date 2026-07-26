@@ -1,12 +1,22 @@
 /// Optional inclusive or exclusive endpoints for generated values.
 ///
 /// Swift's closed, half-open, lower-bounded, and upper-bounded range types
-/// all conform.
+/// all conform. An integer represents one exact value.
 public protocol RangeBounds<Bound> {
     associatedtype Bound: Comparable
 
     var lowerEndpoint: (value: Bound, isInclusive: Bool)? { get }
     var upperEndpoint: (value: Bound, isInclusive: Bool)? { get }
+}
+
+extension Int: RangeBounds {
+    public var lowerEndpoint: (value: Int, isInclusive: Bool)? {
+        (self, true)
+    }
+
+    public var upperEndpoint: (value: Int, isInclusive: Bool)? {
+        (self, true)
+    }
 }
 
 extension ClosedRange: RangeBounds {

@@ -8,8 +8,15 @@ public struct Gen<Value> {
     // without replacement. `nil` means "not enumerable", not "infinite".
     var enumeratedValues: [Value]?
 
+    /// Creates a generator from an imperative sequence of draws.
+    public init(
+        _ draw: @escaping (borrowing TestCase) throws -> Value
+    ) {
+        self.init(enumeratedValues: nil, draw: draw)
+    }
+
     init(
-        enumeratedValues: [Value]? = nil,
+        enumeratedValues: [Value]?,
         draw: @escaping (borrowing TestCase) throws -> Value,
     ) {
         self.draw = draw
@@ -20,13 +27,8 @@ public struct Gen<Value> {
 // MARK: - Composition
 
 extension Gen {
-    /// Creates a forward-reference definition for recursive generators.
-    public static func deferred() -> DeferredGeneratorDefinition<Value> {
-        DeferredGeneratorDefinition()
-    }
-
     /// Always generates the given value.
-    public static func just(_ value: Value) -> Self {
+    public static func constant(_ value: Value) -> Self {
         Self(enumeratedValues: [value]) { _ in value }
     }
 
@@ -43,8 +45,8 @@ extension Gen {
     }
 
     /// Generates a value from one of the supplied generators.
-    public static func oneOf(_ generators: Self...) -> Self {
-        oneOf(generators)
+    public static func oneOf(_ generators: Self?...) -> Self {
+        oneOf(generators.compactMap(\.self))
     }
 
     /// Generates a value from one of the supplied generators.
@@ -61,6 +63,14 @@ extension Gen {
                 return try generators[index].draw(testCase)
             }
         }
+    }
+
+    /// Creates a generator whose definition can refer to itself.
+    public static func recursive(_ definition: (Self) -> Self) -> Self {
+        let deferred = DeferredGeneratorDefinition<Value>()
+        let recursive = deferred.generator
+        deferred.set(definition(recursive))
+        return recursive
     }
 
     /// Transforms generated values without changing their choices.
@@ -122,11 +132,18 @@ extension Gen {
     }
 }
 
+extension Gen where Value: CaseIterable {
+    /// Generates one of the type's cases.
+    public static var cases: Self {
+        sampled(from: Value.allCases)
+    }
+}
+
 // MARK: - Scalar values
 
 extension Gen where Value: FixedWidthInteger {
     /// Generates integers across the type's full range.
-    public static func integers() -> Self {
+    public static var integers: Self {
         integers(in: Value.min...Value.max)
     }
 
@@ -142,6 +159,11 @@ extension Gen where Value: FixedWidthInteger {
 }
 
 extension Gen where Value == Bool {
+    /// Generates uniformly distributed booleans.
+    public static var booleans: Self {
+        booleans()
+    }
+
     /// Generates booleans that are true with the given probability.
     public static func booleans(probability: Double = 0.5) -> Self {
         precondition((0...1).contains(probability))
@@ -152,26 +174,14 @@ extension Gen where Value == Bool {
 }
 
 extension Gen where Value == Float {
-    /// Generates floating-point values, including special values when unbounded.
-    public static func floats(
-        allowingNaN: Bool? = nil,
-        allowingInfinity: Bool? = nil,
-        allowingSubnormal: Bool = true,
-    ) -> Self {
-        Self { testCase in
-            try testCase.float(
-                minimum: -.infinity,
-                maximum: .infinity,
-                allowingNaN: allowingNaN ?? true,
-                allowingInfinity: allowingInfinity ?? true,
-                allowingSubnormal: allowingSubnormal,
-            )
-        }
+    /// Generates floating-point values, including special values.
+    public static var floats: Self {
+        floats()
     }
 
     /// Generates floating-point values within the given bounds.
     public static func floats(
-        in range: some RangeBounds<Float>,
+        in range: some RangeBounds<Float> = -.infinity ... .infinity,
         allowingNaN: Bool? = nil,
         allowingInfinity: Bool? = nil,
         allowingSubnormal: Bool = true,
@@ -201,26 +211,14 @@ extension Gen where Value == Float {
 }
 
 extension Gen where Value == Double {
-    /// Generates floating-point values, including special values when unbounded.
-    public static func floats(
-        allowingNaN: Bool? = nil,
-        allowingInfinity: Bool? = nil,
-        allowingSubnormal: Bool = true,
-    ) -> Self {
-        Self { testCase in
-            try testCase.float(
-                minimum: -.infinity,
-                maximum: .infinity,
-                allowingNaN: allowingNaN ?? true,
-                allowingInfinity: allowingInfinity ?? true,
-                allowingSubnormal: allowingSubnormal,
-            )
-        }
+    /// Generates floating-point values, including special values.
+    public static var floats: Self {
+        floats()
     }
 
     /// Generates floating-point values within the given bounds.
     public static func floats(
-        in range: some RangeBounds<Double>,
+        in range: some RangeBounds<Double> = -.infinity ... .infinity,
         allowingNaN: Bool? = nil,
         allowingInfinity: Bool? = nil,
         allowingSubnormal: Bool = true,
@@ -251,7 +249,7 @@ extension Gen where Value == Double {
 
 extension Gen where Value == [UInt8] {
     /// Generates byte strings using Hegel's default size budget.
-    public static func bytes() -> Self {
+    public static var bytes: Self {
         bytes(size: ValidatedSizeBounds())
     }
 
@@ -270,7 +268,7 @@ extension Gen where Value == [UInt8] {
 
 extension Gen where Value == String {
     /// Generates Unicode strings using Hegel's default size budget.
-    public static func strings() -> Self {
+    public static var strings: Self {
         strings(size: ValidatedSizeBounds())
     }
 
@@ -292,7 +290,7 @@ extension Gen where Value == String {
 
 extension Gen where Value == Unicode.Scalar {
     /// Generates arbitrary Unicode scalar values.
-    public static func unicodeScalars() -> Self {
+    public static var unicodeScalars: Self {
         let specification = Result {
             try StringGeneratorHandle.text(size: 1...1)
         }
@@ -308,8 +306,8 @@ extension Gen where Value == Unicode.Scalar {
 
 extension Gen where Value == Character {
     /// Generates single-scalar characters.
-    public static func characters() -> Self {
-        Gen<Unicode.Scalar>.unicodeScalars().map {
+    public static var characters: Self {
+        Gen<Unicode.Scalar>.unicodeScalars.map {
             Character(String($0))
         }
     }
@@ -345,10 +343,10 @@ extension Gen {
     /// Generates a fixed-size inline array.
     public static func inlineArrays<let count: Int, Element>(
         of element: Gen<Element>
-    ) -> Self where Value == InlineArray<count, Element> {
+    ) -> Self where Value == [count of Element] {
         Self { testCase in
             try testCase.withSpan(label: UInt64(HEGEL_LABEL_TUPLE.rawValue)) {
-                try InlineArray<count, Element> { _ in
+                try [count of Element] { _ in
                     try element.draw(testCase)
                 }
             }

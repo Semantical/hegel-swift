@@ -10,7 +10,7 @@ import Testing
 @Test(.hegel)
 func sorting() async throws {
     try await property { ctx in
-        let values = try ctx.draw(.arrays(of: .integers()))
+        let values = try ctx.draw(.arrays(of: .integers))
         #expect(values.sorted().count == values.count)
     }
 }
@@ -26,9 +26,11 @@ Hegel's reproduction blob attached as a comment.
 Generators compose:
 
 ```swift
-let identifier = Gen<UInt64>.integers()
-let name = Gen<String>.strings(size: 1...40)
-let user = Gen<(UInt64, String)>.tuple(identifier, name)
+let user = Gen<(UInt64, String)> { ctx in
+    let identifier = try ctx.draw(.integers)
+    let name = try ctx.draw(.strings(size: 1...40))
+    return (identifier, name)
+}
 
 let users = Gen<[(UInt64, String)]>.arrays(
     of: user.filter { !$0.1.isEmpty },
@@ -36,10 +38,10 @@ let users = Gen<[(UInt64, String)]>.arrays(
 )
 ```
 
-The core generator vocabulary includes `map`, `flatMap`, `filter`, `oneOf`,
-`optional`, and `sampled(from:)`, along with fixed-width integers,
-floating-point values, booleans, bytes, Unicode scalars, characters, strings,
-arrays, sets, dictionaries, and arbitrary tuple arities.
+The core generator vocabulary includes `constant`, `cases`, `recursive`, `map`,
+`flatMap`, `filter`, `oneOf`, `optional`, and `sampled(from:)`, along with
+fixed-width integers, floating-point values, booleans, bytes, Unicode scalars,
+characters, strings, arrays, sets, dictionaries, and arbitrary tuple arities.
 
 State machines exercise systems through sequences of named rules. Hegel chooses
 and shrinks the rule sequence, while invariants are checked initially and after
@@ -55,7 +57,7 @@ struct TextMachine {
 
     @Rule
     mutating func append(ctx: borrowing TestCase) throws {
-        let character = try ctx.draw(.characters())
+        let character = try ctx.draw(.characters)
         text.append(character)
         model.append(character)
     }
@@ -93,7 +95,7 @@ struct Machine: ~Copyable {
 
     @Rule
     mutating func create(ctx: borrowing TestCase) throws {
-        let id = try ctx.draw(.integers())
+        let id = try ctx.draw(.integers)
         try ids.add(id)
     }
 

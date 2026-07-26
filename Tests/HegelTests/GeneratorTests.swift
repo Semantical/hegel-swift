@@ -20,6 +20,13 @@ private indirect enum Tree {
     }
 }
 
+private enum Direction: CaseIterable {
+    case north
+    case east
+    case south
+    case west
+}
+
 private var generatorSettings: Settings {
     Settings(
         testCases: 200,
@@ -39,7 +46,7 @@ struct GeneratorTests {
             .filter { $0.isMultiple(of: 2) }
             .map { $0 * 2 }
         let dependent = Gen<Int>.integers(in: 20...22)
-            .flatMap { .just($0 + 1) }
+            .flatMap { .constant($0 + 1) }
         let generator = Gen<Int>.oneOf(smallEvens, dependent)
             .optional(probabilityOfSome: 0.8)
 
@@ -52,17 +59,40 @@ struct GeneratorTests {
     }
 
     @Test
+    func `builds generators from draw closures`() async throws {
+        let generator = Gen<(Int, Bool)> { ctx in
+            let integer = try ctx.draw(.integers(in: 10...20))
+            let boolean = try ctx.draw(.booleans)
+            return (integer, boolean)
+        }
+
+        try await property { ctx in
+            let (integer, _) = try ctx.draw(generator)
+            #expect((10...20).contains(integer))
+        }
+    }
+
+    @Test
+    func `generates CaseIterable cases`() async throws {
+        let allCases = Set(Direction.allCases)
+        let generator = Gen<Set<Direction>>.sets(of: .cases, size: allCases.count)
+
+        try await property { ctx in
+            let cases = try ctx.draw(generator)
+            #expect(cases == allCases)
+        }
+    }
+
+    @Test
     func `supports recursive generator definitions`() async throws {
-        let tree = Gen<Tree>.deferred()
-        let recursive = tree.generator
-        let branch = Gen<(Tree, Tree)>.tuple(recursive, recursive)
-            .map { Tree.branch($0, $1) }
-        tree.set(
-            .oneOf(
+        let recursive = Gen<Tree>.recursive { tree in
+            let branch = Gen<(Tree, Tree)>.tuple(tree, tree)
+                .map { Tree.branch($0, $1) }
+            return .oneOf(
                 Gen<Int>.integers(in: 10...20).map(Tree.leaf),
                 branch,
             )
-        )
+        }
 
         try await property { testCase in
             let tree = try testCase.draw(recursive)
@@ -120,7 +150,7 @@ struct GeneratorTests {
         try await property { testCase in
             let bytes = try testCase.draw(.bytes(size: ..<13))
             let (integer, string) = try testCase.draw(tuple)
-            let character = try testCase.draw(.characters())
+            let character = try testCase.draw(.characters)
             let fixed = try testCase.draw(inlineArray)
 
             #expect(bytes.count < 13)
@@ -138,12 +168,12 @@ struct GeneratorTests {
         try await property { testCase in
             let bytes = try testCase.draw(.bytes(size: 11...))
             let string = try testCase.draw(.strings(size: 11...))
-            let array = try testCase.draw(.arrays(of: .booleans(), size: 11...))
+            let array = try testCase.draw(.arrays(of: .booleans, size: 11...))
             let set = try testCase.draw(.sets(of: keys, size: 11...))
             let dictionary = try testCase.draw(
                 .dictionaries(
                     keys: keys,
-                    values: .booleans(),
+                    values: .booleans,
                     size: 11...,
                 )
             )
@@ -165,12 +195,12 @@ struct GeneratorTests {
             let dictionary = try testCase.draw(
                 .dictionaries(
                     keys: keys,
-                    values: .booleans(),
+                    values: .booleans,
                     size: 3..<9,
                 )
             )
             let generatedSet = try testCase.draw(
-                .sets(of: .integers(in: 1...3), size: 3...3)
+                .sets(of: .integers(in: 1...3), size: 3)
             )
 
             #expect(set == [1, 2, 3])
@@ -182,7 +212,7 @@ struct GeneratorTests {
     @Test
     func `does not draw values for rejected dictionary keys`() async throws {
         let valueDraws = Mutex(0)
-        let values = Gen<Int>.integers().map { value in
+        let values = Gen<Int>.integers.map { value in
             valueDraws.withLock { $0 += 1 }
             return value
         }
