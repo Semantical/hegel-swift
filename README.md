@@ -122,7 +122,7 @@ To debug one exact failure, temporarily configure the test with its reproduction
 blob:
 
 ```swift
-@Test(.hegel(reproducing: "AAEAAAAACgEAAAAF"))
+@Test(.hegel.reproducing("AAEAAAAACgEAAAAF"))
 ```
 
 Remove the reproduction trait after fixing the failure so the test resumes

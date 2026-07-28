@@ -59,7 +59,26 @@ func `property requires the Hegel trait`() async {
     #expect(error?.description == "`property` requires the `.hegel` trait.")
 }
 
-@Suite(.hegel(settings: deterministicSettings))
+@Test(.hegel.testCases(3).verbosity(.quiet).database(.disabled).phases([.generate]))
+func `configures test cases directly on the trait`() async throws {
+    var calls = 0
+    try await property { ctx in
+        calls += 1
+        _ = try ctx.draw(Gen<UInt64>.integers)
+    }
+    #expect(calls == 3)
+}
+
+@Test(.hegel.verbosity(.quiet).database(.disabled).phases([]))
+func `can disable every test lifecycle phase`() async throws {
+    var calls = 0
+    try await property { _ in
+        calls += 1
+    }
+    #expect(calls == 0)
+}
+
+@Suite(.hegel(deterministicSettings))
 struct HegelTests {
     @Test
     func `draws structured values`() async throws {
@@ -136,7 +155,7 @@ struct HegelTests {
         #expect(String(describing: requiredIssue).contains("< 5"))
     }
 
-    @Test(.hegel(reproducing: minimalIntegerReproduction))
+    @Test(.hegel.reproducing(minimalIntegerReproduction))
     func `replays an example configured by the trait`() async throws {
         try await property { testCase in
             let value = try testCase.draw(.integers(in: 0...100))
@@ -152,7 +171,7 @@ struct HegelTests {
             capturedDatabaseIssueCount.withLock { $0 += 1 }
             return nil
         },
-        .hegel(settings: databaseSettings),
+        .hegel(databaseSettings),
     )
     func `reuses persisted counterexamples`() async throws {
         try? FileManager.default.removeItem(atPath: databasePath)

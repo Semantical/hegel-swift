@@ -8,15 +8,16 @@ private struct ParameterizedHegelTestError: Error, CustomStringConvertible {
 
 /// Configures Hegel properties and integrates their failures with Swift Testing.
 public struct HegelTrait: TestTrait, SuiteTrait, TestScoping {
-    public var settings: Settings?
-    public var reproduction: String?
+    private var settings: Settings?
+    private var reproduction: String?
 
-    public init(
-        settings: Settings? = nil,
-        reproducing reproduction: String? = nil,
-    ) {
+    fileprivate init(settings: Settings? = nil) {
         self.settings = settings
-        self.reproduction = reproduction
+    }
+
+    private var configuredSettings: Settings {
+        get { settings ?? Settings() }
+        set { settings = newValue }
     }
 
     public var isRecursive: Bool {
@@ -81,28 +82,67 @@ public struct HegelTrait: TestTrait, SuiteTrait, TestScoping {
     }
 }
 
+extension HegelTrait {
+    /// Sets the maximum number of valid test cases.
+    public consuming func testCases(_ testCases: UInt64) -> Self {
+        configuredSettings.testCases = testCases
+        return self
+    }
+
+    /// Sets the amount of engine diagnostic output.
+    public consuming func verbosity(_ verbosity: Settings.Verbosity) -> Self {
+        configuredSettings.verbosity = verbosity
+        return self
+    }
+
+    /// Sets a fixed seed, or `nil` to choose one at run time.
+    public consuming func seed(_ seed: UInt64?) -> Self {
+        configuredSettings.seed = seed
+        return self
+    }
+
+    /// Controls whether unseeded runs derive stable seeds from test identifiers.
+    public consuming func derandomize(_ derandomize: Bool?) -> Self {
+        configuredSettings.derandomize = derandomize
+        return self
+    }
+
+    /// Sets where Hegel persists and reuses interesting examples.
+    public consuming func database(_ database: Settings.Database) -> Self {
+        configuredSettings.database = database
+        return self
+    }
+
+    /// Sets the property-test lifecycle phases to run.
+    public consuming func phases(_ phases: Settings.Phases) -> Self {
+        configuredSettings.phases = phases
+        return self
+    }
+
+    /// Suppresses the given health checks.
+    public consuming func suppressingHealthChecks(
+        _ healthChecks: Settings.HealthChecks
+    ) -> Self {
+        configuredSettings.suppressedHealthChecks = healthChecks
+        return self
+    }
+
+    /// Replays one Hegel example instead of searching for new failures.
+    public consuming func reproducing(_ reproduction: String) -> Self {
+        self.reproduction = reproduction
+        return self
+    }
+}
+
 extension Trait where Self == HegelTrait {
     /// Integrates Hegel properties with Swift Testing.
     public static var hegel: Self {
         Self()
     }
 
-    /// Configures Hegel properties and integrates `#expect` failures.
-    public static func hegel(settings: Settings) -> Self {
+    /// Integrates Hegel properties with Swift Testing.
+    public static func hegel(_ settings: Settings) -> Self {
         Self(settings: settings)
-    }
-
-    /// Replays one Hegel example instead of searching for new failures.
-    public static func hegel(reproducing reproduction: String) -> Self {
-        Self(reproducing: reproduction)
-    }
-
-    /// Configures Hegel and replays one prior example.
-    public static func hegel(
-        settings: Settings,
-        reproducing reproduction: String,
-    ) -> Self {
-        Self(settings: settings, reproducing: reproduction)
     }
 }
 
@@ -121,7 +161,7 @@ extension Issue {
                 }
             comments.append(
                 Comment(
-                    rawValue: (["Hegel state machine:"] + steps)
+                    rawValue: (["Hegel state machine trace:"] + steps)
                         .joined(separator: "\n")
                 )
             )

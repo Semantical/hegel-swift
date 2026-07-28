@@ -38,7 +38,7 @@ private var generatorSettings: Settings {
 
 private let capturedArrayFailure = Mutex<ArrayLengthFailure?>(nil)
 
-@Suite(.hegel(settings: generatorSettings))
+@Suite(.hegel(generatorSettings))
 struct GeneratorTests {
     @Test
     func `composes generators`() async throws {
