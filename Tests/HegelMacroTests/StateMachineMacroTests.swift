@@ -2,18 +2,18 @@
 import HegelMacrosPlugin
 import SwiftDiagnostics
 import SwiftSyntax
+import SwiftSyntaxMacroExpansion
 import SwiftSyntaxMacros
 import SwiftSyntaxMacrosGenericTestSupport
-import SwiftSyntaxMacrosTestSupport
 import Testing
 
 @Suite
 struct StateMachineMacroTests {
-    private var macros: [String: any Macro.Type] {
+    private var macroSpecs: [String: MacroSpec] {
         [
-            "Invariant": InvariantMacro.self,
-            "Rule": RuleMacro.self,
-            "StateMachine": StateMachineMacro.self,
+            "Invariant": MacroSpec(type: InvariantMacro.self),
+            "Rule": MacroSpec(type: RuleMacro.self),
+            "StateMachine": MacroSpec(type: StateMachineMacro.self),
         ]
     }
 
@@ -62,8 +62,9 @@ struct StateMachineMacroTests {
                 extension PoolMachine: Hegel.StateMachine {
                 }
                 """,
-            macros: macros,
+            macroSpecs: macroSpecs,
             indentationWidth: .spaces(4),
+            failureHandler: recordFailure,
         )
     }
 
@@ -109,8 +110,9 @@ struct StateMachineMacroTests {
                     severity: .error,
                 )
             ],
-            macros: macros,
+            macroSpecs: macroSpecs,
             indentationWidth: .spaces(4),
+            failureHandler: recordFailure,
         )
     }
 
@@ -143,8 +145,9 @@ struct StateMachineMacroTests {
                     severity: .error,
                 ),
             ],
-            macros: macros,
+            macroSpecs: macroSpecs,
             indentationWidth: .spaces(4),
+            failureHandler: recordFailure,
         )
     }
 
@@ -177,8 +180,9 @@ struct StateMachineMacroTests {
                     severity: .error,
                 ),
             ],
-            macros: macros,
+            macroSpecs: macroSpecs,
             indentationWidth: .spaces(4),
+            failureHandler: recordFailure,
         )
     }
 
@@ -215,9 +219,22 @@ struct StateMachineMacroTests {
                     severity: .error,
                 ),
             ],
-            macros: macros,
+            macroSpecs: macroSpecs,
             indentationWidth: .spaces(4),
+            failureHandler: recordFailure,
         )
     }
+}
+
+private func recordFailure(_ failure: TestFailureSpec) {
+    Issue.record(
+        Comment(rawValue: failure.message),
+        sourceLocation: SourceLocation(
+            fileID: failure.location.fileID,
+            filePath: failure.location.filePath,
+            line: failure.location.line,
+            column: failure.location.column,
+        ),
+    )
 }
 #endif
