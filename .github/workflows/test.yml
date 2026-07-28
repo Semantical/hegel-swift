@@ -2,8 +2,12 @@ name: Test
 
 on:
   pull_request:
-  push:
-    branches: [main, cross-platform]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to create after the tests pass
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -25,3 +29,24 @@ jobs:
       enable_windows_checks: true
       linux_swift_versions: '["6.3"]'
       windows_swift_versions: '["6.3"]'
+
+  tag:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [macos, cross-platform]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Create tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Release tags must be created from main"
+            exit 1
+          fi
+
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            --raw-field ref="refs/tags/$TAG" \
+            --raw-field sha="$GITHUB_SHA"
