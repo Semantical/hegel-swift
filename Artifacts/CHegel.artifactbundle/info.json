@@ -2,13 +2,61 @@
   "schemaVersion": "1.0",
   "artifacts": {
     "chegel": {
-      "version": "0.30.1",
+      "version": "0.30.3",
       "type": "staticLibrary",
       "variants": [
         {
           "path": "arm64-apple-macosx/libhegel_c.a",
           "supportedTriples": [
             "arm64-apple-macosx"
+          ],
+          "staticLibraryMetadata": {
+            "headerPaths": [
+              "include"
+            ],
+            "moduleMapPath": "include/module.modulemap"
+          }
+        },
+        {
+          "path": "aarch64-unknown-linux-gnu/libhegel_c.a",
+          "supportedTriples": [
+            "aarch64-unknown-linux-gnu"
+          ],
+          "staticLibraryMetadata": {
+            "headerPaths": [
+              "include"
+            ],
+            "moduleMapPath": "include/module.modulemap"
+          }
+        },
+        {
+          "path": "x86_64-unknown-linux-gnu/libhegel_c.a",
+          "supportedTriples": [
+            "x86_64-unknown-linux-gnu"
+          ],
+          "staticLibraryMetadata": {
+            "headerPaths": [
+              "include"
+            ],
+            "moduleMapPath": "include/module.modulemap"
+          }
+        },
+        {
+          "path": "aarch64-unknown-windows-msvc/hegel_c.lib",
+          "supportedTriples": [
+            "aarch64-unknown-windows-msvc"
+          ],
+          "staticLibraryMetadata": {
+            "headerPaths": [
+              "include"
+            ],
+            "moduleMapPath": "include/module.modulemap"
+          }
+        },
+        {
+          "path": "x86_64-unknown-windows-msvc/hegel_c.lib",
+          "supportedTriples": [
+            "x86_64-unknown-windows-msvc"
           ],
           "staticLibraryMetadata": {
             "headerPaths": [

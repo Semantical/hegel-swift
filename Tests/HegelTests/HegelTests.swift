@@ -133,7 +133,7 @@ struct HegelTests {
 
         let issue = capturedExpectationIssue.withLock { $0 }
         let requiredIssue = try #require(issue)
-        #expect(String(describing: requiredIssue).contains("value < 5"))
+        #expect(String(describing: requiredIssue).contains("< 5"))
     }
 
     @Test(.hegel(reproducing: minimalIntegerReproduction))

@@ -1,4 +1,4 @@
-// swift-tools-version: 6.4
+// swift-tools-version: 6.3
 
 import CompilerPluginSupport
 import PackageDescription
@@ -20,7 +20,7 @@ var package = Package(
         .library(
             name: "Hegel",
             targets: ["Hegel"],
-        ),
+        )
     ],
     traits: [
         .default(enabledTraits: ["HegelMacros"]),
@@ -32,7 +32,7 @@ var package = Package(
     dependencies: [
         .package(
             url: "https://github.com/swiftlang/swift-syntax",
-            "600.0.0"..<"605.0.0",
+            "603.0.0"..<"605.0.0",
         )
     ],
     targets: [
@@ -50,6 +50,9 @@ var package = Package(
                 ),
             ],
             swiftSettings: swiftSettings,
+            linkerSettings: [
+                .linkedLibrary("ntdll", .when(platforms: [.windows])),
+            ],
         ),
         .macro(
             name: "HegelMacrosPlugin",
