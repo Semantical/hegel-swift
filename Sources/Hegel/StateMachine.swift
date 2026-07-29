@@ -223,11 +223,11 @@ private struct CStringArray {
     func withUnsafePointers<Result>(
         _ body: (UnsafePointer<UnsafePointer<CChar>?>?, Int) throws -> Result
     ) rethrows -> Result {
-        try storage.withUnsafeBufferPointer { storage in
+        unsafe try storage.withUnsafeBufferPointer { storage in
             let pointers: [UnsafePointer<CChar>?] = unsafe offsets.map { offset in
                 unsafe storage.baseAddress?.advanced(by: offset)
             }
-            return try pointers.withUnsafeBufferPointer { pointers in
+            return unsafe try pointers.withUnsafeBufferPointer { pointers in
                 try unsafe body(pointers.baseAddress, pointers.count)
             }
         }
