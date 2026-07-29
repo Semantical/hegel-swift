@@ -2,129 +2,171 @@ import Hegel
 import Synchronization
 import Testing
 
-private struct StateMachineFailure: Error {
-    var steps: Int
-}
-
-private struct CapturedStateMachineFailure {
-    var issue: Issue
-    var failure: StateMachineFailure
-}
-
-private var stateMachineSettings: Settings {
-    Settings(
-        testCases: 200,
-        verbosity: .quiet,
-        seed: 0xC0FFEE,
-        database: .disabled,
-    )
-}
-
-private let capturedStateMachineFailure = Mutex<CapturedStateMachineFailure?>(nil)
-
-@Test(.hegel(stateMachineSettings))
-private func `requires a state machine for context-free pool operations`() async throws {
-    try await property { ctx in
-        var values = Pool<Int>()
-        #expect(throws: HegelError.self) {
-            try values.add(1)
-        }
-
-        try ctx.add(1, to: &values)
-        #expect(try ctx.draw(from: values) == 1)
-        #expect(throws: HegelError.self) {
-            try values.draw()
+@Suite
+struct StateMachineTests {
+    @Test(.hegel(generationSettings()))
+    func `invariants can draw from the test case`() async throws {
+        try await property { tc in
+            try await tc.run(ContextInvariantMachine())
         }
     }
+
+    @Suite
+    struct RejectedRuleTests {
+        private struct Counts {
+            var attempts = 0
+            var continuations = 0
+        }
+
+        private static let counts = Mutex(Counts())
+
+        @Test(.hegel(generationSettings(testCases: 50)))
+        func `rejected rules stop executing without failing the run`() async throws {
+            Self.counts.withLock { $0 = Counts() }
+
+            try await property { tc in
+                try await tc.run(Machine())
+            }
+
+            let counts = Self.counts.withLock { $0 }
+            #expect(counts.attempts > 0)
+            #expect(counts.continuations == 0)
+        }
+
+        private struct Machine: StateMachine {
+            static var rules: Rules {
+                rule("reject") { _, tc in
+                    RejectedRuleTests.counts.withLock { $0.attempts += 1 }
+                    try tc.assume(false)
+                    RejectedRuleTests.counts.withLock { $0.continuations += 1 }
+                }
+            }
+        }
+    }
+
+    @Suite
+    struct InitialInvariantTests {
+        private struct Failure: Error {}
+
+        private static let capturedIssue = Mutex<Issue?>(nil)
+
+        @Test(
+            .compactMapIssues { issue in
+                guard issue.error is Failure else {
+                    return issue
+                }
+                InitialInvariantTests.capturedIssue.withLock { $0 = issue }
+                return nil
+            },
+            .hegel(searchSettings()),
+        )
+        func `reports failures from the initial invariant check`() async throws {
+            Self.capturedIssue.withLock { $0 = nil }
+
+            try await property { tc in
+                try await tc.run(Machine())
+            }
+
+            let issue = try #require(Self.capturedIssue.withLock { $0 })
+            #expect(
+                issue.comments.last == """
+                    Hegel state machine trace:
+                    Initial invariant check
+                    """
+            )
+        }
+
+        private struct Machine: StateMachine {
+            static var rules: Rules {
+                rule("unreachable") { _, _ in }
+            }
+
+            static var invariants: Invariants {
+                invariant("fails initially") { _ in
+                    throw Failure()
+                }
+            }
+        }
+    }
+
+    @Suite
+    struct ShrinkingTests {
+        private struct Failure: Error {
+            var steps: Int
+        }
+
+        private struct CapturedFailure {
+            var issue: Issue
+            var failure: Failure
+        }
+
+        private static let capturedFailure = Mutex<CapturedFailure?>(nil)
+
+        @Test(
+            .compactMapIssues { issue in
+                guard let failure = issue.error as? Failure else {
+                    return issue
+                }
+                ShrinkingTests.capturedFailure.withLock {
+                    $0 = CapturedFailure(issue: issue, failure: failure)
+                }
+                return nil
+            },
+            .hegel(searchSettings()),
+        )
+        func `shrinks rule sequences`() async throws {
+            Self.capturedFailure.withLock { $0 = nil }
+
+            try await property { tc in
+                try await tc.run(Machine())
+            }
+
+            let captured = try #require(Self.capturedFailure.withLock { $0 })
+            #expect(captured.failure.steps == 3)
+            #expect(
+                captured.issue.comments.last == """
+                    Hegel state machine trace:
+                    Step 1: increment
+                    Step 2: increment
+                    Step 3: increment
+                    """
+            )
+        }
+
+        private struct Machine: StateMachine {
+            var steps = 0
+
+            static var rules: Rules {
+                rule("increment") { machine, _ in
+                    machine.steps += 1
+                    guard machine.steps < 3 else {
+                        throw Failure(steps: machine.steps)
+                    }
+                }
+            }
+        }
+    }
+
+    #if HegelMacros
+    @Test(.hegel(searchSettings()))
+    func `macro derives state-machine descriptors`() async throws {
+        try await property { tc in
+            try await tc.run(MacroPoolMachine())
+        }
+    }
+    #endif
 }
 
-private struct PoolMachine: ~Copyable, StateMachine {
-    var expected: [Int] = []
-    var values = Pool<Int>()
-
+private struct ContextInvariantMachine: StateMachine {
     static var rules: Rules {
-        rule("add duplicate values") { machine, ctx in
-            let value = try ctx.draw(.integers(in: 0...10))
-            try machine.values.add(value)
-            try ctx.add(value, to: &machine.values)
-            machine.expected.append(contentsOf: [value, value])
-
-            let reused = try machine.values.draw()
-            #expect(machine.expected.contains(reused))
-
-            let taken = try machine.values.take()
-            let index = try #require(machine.expected.firstIndex(of: taken))
-            machine.expected.remove(at: index)
-        }
-
-        rule("reuse a value") { machine, ctx in
-            let value = try machine.values.draw()
-            #expect(machine.expected.contains(value))
-        }
-
-        rule("consume a value") { machine, ctx in
-            let value = try machine.values.take()
-            let index = try #require(machine.expected.firstIndex(of: value))
-            machine.expected.remove(at: index)
-        }
+        rule("no-op") { _, _ in }
     }
 
     static var invariants: Invariants {
-        invariant("pool mirrors the model") { machine in
-            #expect(machine.values.count == machine.expected.count)
-            #expect(machine.values.isEmpty == machine.expected.isEmpty)
+        invariant("draws a value") { _, tc in
+            let value = try tc.draw(.integers(in: 1...1))
+            #expect(value == 1)
         }
-    }
-
-    @Test(.hegel(stateMachineSettings))
-    static func `tracks reusable and consumed values`() async throws {
-        try await property { ctx in
-            try await ctx.run(Self())
-        }
-    }
-}
-
-private struct ShrinkingMachine: StateMachine {
-    var steps = 0
-
-    static var rules: Rules {
-        rule("increment") { machine, _ in
-            machine.steps += 1
-            guard machine.steps < 3 else {
-                throw StateMachineFailure(steps: machine.steps)
-            }
-        }
-    }
-
-    @Test(
-        .compactMapIssues { issue in
-            guard let failure = issue.error as? StateMachineFailure else {
-                return issue
-            }
-            capturedStateMachineFailure.withLock {
-                $0 = CapturedStateMachineFailure(issue: issue, failure: failure)
-            }
-            return nil
-        },
-        .hegel(stateMachineSettings),
-    )
-    static func `shrinks rule sequences`() async throws {
-        capturedStateMachineFailure.withLock { $0 = nil }
-
-        try await property { ctx in
-            try await ctx.run(Self())
-        }
-
-        let captured = try #require(capturedStateMachineFailure.withLock { $0 })
-        #expect(captured.failure.steps == 3)
-        #expect(
-            captured.issue.comments.last == """
-                Hegel state machine trace:
-                Step 1: increment
-                Step 2: increment
-                Step 3: increment
-                """
-        )
     }
 }
 
@@ -135,8 +177,8 @@ private struct MacroPoolMachine: ~Copyable {
     var values = Pool<Int>()
 
     @Rule
-    mutating func add(ctx: borrowing TestCase) throws {
-        let value = try ctx.draw(.integers(in: 0...10))
+    mutating func add(tc: borrowing TestCase) throws {
+        let value = try tc.draw(.integers(in: 0...10))
         try values.add(value)
         expected.append(value)
     }
@@ -151,13 +193,6 @@ private struct MacroPoolMachine: ~Copyable {
     func `pool mirrors model`() {
         #expect(values.count == expected.count)
         #expect(values.isEmpty == expected.isEmpty)
-    }
-
-    @Test(.hegel(stateMachineSettings))
-    static func `derives state machine descriptors`() async throws {
-        try await property { ctx in
-            try await ctx.run(Self())
-        }
     }
 }
 #endif

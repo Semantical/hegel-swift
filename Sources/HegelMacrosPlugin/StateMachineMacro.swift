@@ -142,7 +142,7 @@ public struct StateMachineMacro: MemberMacro, ExtensionMacro {
         let name = StringLiteralExprSyntax(content: function.name.text)
         let invocation = invocation(of: function)
         return """
-            Hegel.\(raw: descriptor)(\(name)) { machine, ctx in
+            Hegel.\(raw: descriptor)(\(name)) { machine, tc in
                 \(invocation)
             }
             """
@@ -163,9 +163,9 @@ public struct StateMachineMacro: MemberMacro, ExtensionMacro {
         let arguments: String
         if let parameter {
             if parameter.firstName.tokenKind == .wildcard {
-                arguments = "ctx"
+                arguments = "tc"
             } else {
-                arguments = "\(parameter.firstName.text): ctx"
+                arguments = "\(parameter.firstName.text): tc"
             }
         } else {
             arguments = ""

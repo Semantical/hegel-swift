@@ -7,8 +7,8 @@ private let compositeSpanLabel: UInt64 = 0x5357494654_01
 public struct Gen<Value> {
     var draw: (borrowing TestCase) throws -> Value
 
-    // A known, practically enumerable domain lets unordered collections draw
-    // without replacement. `nil` means "not enumerable", not "infinite".
+    // A known, practically enumerable domain lets unordered collections select
+    // distinct entries directly. `nil` means "not enumerable", not "infinite".
     var enumeratedValues: [Value]?
 
     /// Creates a generator from an imperative sequence of draws.

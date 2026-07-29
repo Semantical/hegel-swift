@@ -18,3 +18,4 @@ Use `swift test -q`.
 - Prefer exhaustive switches.
 - Whenever possible use maximum sugar: `T?` over `Optional<T>`, `[T]` over `Array<T>`, `some Protocol` instead of `<T: Protocol>`, etc.
 - Wrap judiciously: rarely before column 80; to taste up to 100; swift-format will force wrap after.
+- Never use `@testable import`. Use `package` access level where required instead.

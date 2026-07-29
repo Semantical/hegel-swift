@@ -24,27 +24,27 @@ struct StateMachineMacroTests {
             @StateMachine
             struct PoolMachine {
                 @Rule
-                mutating func add(ctx: borrowing TestCase) throws {}
+                mutating func add(tc: borrowing TestCase) throws {}
 
                 @Rule
                 mutating func reset() async {}
 
                 @Invariant
-                func hasExpectedContents(_ ctx: borrowing Hegel.TestCase) async throws {}
+                func `has expected contents`(_ tc: borrowing Hegel.TestCase) async throws {}
             }
             """,
             expandedSource: """
                 struct PoolMachine {
-                    mutating func add(ctx: borrowing TestCase) throws {}
+                    mutating func add(tc: borrowing TestCase) throws {}
                     mutating func reset() async {}
-                    func hasExpectedContents(_ ctx: borrowing Hegel.TestCase) async throws {}
+                    func `has expected contents`(_ tc: borrowing Hegel.TestCase) async throws {}
 
                     static var rules: [Hegel.Rule<Self>] {
                         [
-                        Hegel.Rule("add") { machine, ctx in
-                            try machine.add(ctx: ctx)
+                        Hegel.Rule("add") { machine, tc in
+                            try machine.add(tc: tc)
                         },
-                        Hegel.Rule("reset") { machine, ctx in
+                        Hegel.Rule("reset") { machine, tc in
                             await machine.reset()
                         },
                         ]
@@ -52,8 +52,8 @@ struct StateMachineMacroTests {
 
                     static var invariants: [Hegel.Invariant<Self>] {
                         [
-                        Hegel.Invariant("hasExpectedContents") { machine, ctx in
-                            try await machine.hasExpectedContents(ctx)
+                        Hegel.Invariant("`has expected contents`") { machine, tc in
+                            try await machine.`has expected contents`(tc)
                         },
                         ]
                     }
@@ -88,7 +88,7 @@ struct StateMachineMacroTests {
 
                     static var rules: [Hegel.Rule<Self>] {
                         [
-                        Hegel.Rule("step") { machine, ctx in
+                        Hegel.Rule("step") { machine, tc in
                             machine.step()
                         },
                         ]

@@ -11,8 +11,8 @@ import Testing
 
 @Test(.hegel)
 func sorting() async throws {
-    try await property { ctx in
-        let values = try ctx.draw(.arrays(of: .integers))
+    try await property { tc in
+        let values = try tc.draw(.arrays(of: .integers))
         #expect(values.sorted().count == values.count)
     }
 }
@@ -28,9 +28,9 @@ Hegel's reproduction blob attached as a comment.
 Generators compose:
 
 ```swift
-let user = Gen<(UInt64, String)> { ctx in
-    let identifier = try ctx.draw(.integers)
-    let name = try ctx.draw(.strings(size: 1...40))
+let user = Gen<(UInt64, String)> { tc in
+    let identifier = try tc.draw(.integers)
+    let name = try tc.draw(.strings(size: 1...40))
     return (identifier, name)
 }
 
@@ -58,15 +58,15 @@ struct TextMachine {
     var model: [Character] = []
 
     @Rule
-    mutating func append(ctx: borrowing TestCase) throws {
-        let character = try ctx.draw(.characters)
+    mutating func append(tc: borrowing TestCase) throws {
+        let character = try tc.draw(.characters)
         text.append(character)
         model.append(character)
     }
 
     @Rule
-    mutating func removeLast(ctx: borrowing TestCase) throws {
-        try ctx.assume(!model.isEmpty)
+    mutating func removeLast(tc: borrowing TestCase) throws {
+        try tc.assume(!model.isEmpty)
         #expect(text.popLast() == model.removeLast())
     }
 
@@ -77,8 +77,8 @@ struct TextMachine {
 
     @Test(.hegel)
     static func property() async throws {
-        try await property { ctx in
-            try await ctx.run(Self())
+        try await property { tc in
+            try await tc.run(Self())
         }
     }
 }
@@ -96,8 +96,8 @@ struct Machine: ~Copyable {
     var ids = Pool<Int>()
 
     @Rule
-    mutating func create(ctx: borrowing TestCase) throws {
-        let id = try ctx.draw(.integers)
+    mutating func create(tc: borrowing TestCase) throws {
+        let id = try tc.draw(.integers)
         try ids.add(id)
     }
 
