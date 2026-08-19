@@ -45,8 +45,10 @@ extension Gen {
         Self(enumeratedValues: [value]) { _ in value }
     }
 
-    /// Generates one of the supplied values.
-    public static func sampled(from values: some Collection<Value>) -> Self {
+    /// Generates one of the supplied values in their stable iteration order.
+    public static func sampled(
+        from values: some BidirectionalCollection<Value>
+    ) -> Self {
         let values = Array(values)
         precondition(!values.isEmpty)
         return Self(enumeratedValues: values) { testCase in
@@ -55,6 +57,31 @@ extension Gen {
                 return values[index]
             }
         }
+    }
+
+    /// Generates one of the supplied values after putting them in a deterministic total order.
+    public static func sampled(
+        from values: some Collection<Value>,
+        sortedBy areInIncreasingOrder: (Value, Value) -> Bool
+    ) -> Self {
+        sampled(from: values.sorted(by: areInIncreasingOrder))
+    }
+
+    /// Returns a generator over the supplied values, or `nil` when they are empty.
+    public static func sampledIfPresent(
+        from values: some BidirectionalCollection<Value>
+    ) -> Self? {
+        guard !values.isEmpty else { return nil }
+        return sampled(from: values)
+    }
+
+    /// Returns a stably ordered generator, or `nil` when no values are supplied.
+    public static func sampledIfPresent(
+        from values: some Collection<Value>,
+        sortedBy areInIncreasingOrder: (Value, Value) -> Bool
+    ) -> Self? {
+        guard !values.isEmpty else { return nil }
+        return sampled(from: values, sortedBy: areInIncreasingOrder)
     }
 
     /// Generates a value from one of the supplied generators.
@@ -145,7 +172,7 @@ extension Gen {
     }
 }
 
-extension Gen where Value: CaseIterable {
+extension Gen where Value: CaseIterable, Value.AllCases: BidirectionalCollection {
     /// Generates one of the type's cases.
     public static var cases: Self {
         sampled(from: Value.allCases)

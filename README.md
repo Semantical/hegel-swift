@@ -45,6 +45,11 @@ The core generator vocabulary includes `constant`, `cases`, `recursive`, `map`,
 fixed-width integers, floating-point values, booleans, bytes, Unicode scalars,
 characters, strings, arrays, sets, dictionaries, and arbitrary tuple arities.
 
+`sampled(from:)` preserves the iteration order of a bidirectional collection,
+which must remain stable when a failure is reproduced in another process. Pass
+an explicit deterministic total order through `sortedBy` when sampling another
+collection. Use `sampledIfPresent` when the collection may be empty.
+
 State machines exercise systems through sequences of named rules. Hegel chooses
 and shrinks the rule sequence, while invariants are checked initially and after
 every successful rule.

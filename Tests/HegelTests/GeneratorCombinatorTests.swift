@@ -1,7 +1,12 @@
 import Hegel
+import Synchronization
 import Testing
 
 private struct FilterFailure: Error {}
+
+private struct SampleFailure: Error {
+    var value: Int
+}
 
 private indirect enum Tree {
     case leaf(Int)
@@ -68,12 +73,28 @@ struct GeneratorCombinatorTests {
 
     @Test(.hegel(generationSettings(testCases: 10)))
     func `oneOf ignores absent generators`() async throws {
-        let generator = Gen.oneOf(nil, .constant(42), nil)
+        let generator = Gen.oneOf(
+            Gen.sampledIfPresent(from: [Int]()),
+            Gen.sampledIfPresent(from: [42]),
+            nil,
+        )
 
         try await property { tc in
             let value = try tc.draw(generator)
             #expect(value == 42)
         }
+    }
+
+    @Test
+    func `recognizes empty samples in every ordering mode`() {
+        let ordered = Gen<Int>.sampledIfPresent(from: [Int]())
+        let sorted = Gen<Int>.sampledIfPresent(
+            from: AnyCollection<Int>([]),
+            sortedBy: <,
+        )
+
+        #expect(ordered == nil)
+        #expect(sorted == nil)
     }
 
     @Test(.hegel(generationSettings(testCases: 10)))
@@ -146,6 +167,61 @@ struct GeneratorCombinatorTests {
         try await property { tc in
             let tree = try tc.draw(recursive)
             #expect(tree.leaves.allSatisfy { (10...20).contains($0) })
+        }
+    }
+
+    @Suite
+    struct OrderedSamplingTests {
+        private static let minimum = Mutex<Int?>(nil)
+
+        @Test(
+            .compactMapIssues { issue in
+                guard let failure = issue.error as? SampleFailure else {
+                    return issue
+                }
+                OrderedSamplingTests.minimum.withLock { $0 = failure.value }
+                return nil
+            },
+            .hegel(searchSettings()),
+        )
+        func `shrinks in collection order`() async throws {
+            Self.minimum.withLock { $0 = nil }
+
+            try await property { tc in
+                let value = try tc.draw(.sampled(from: [30, 20, 10]))
+                throw SampleFailure(value: value)
+            }
+
+            #expect(Self.minimum.withLock { $0 } == 30)
+        }
+    }
+
+    @Suite
+    struct ExplicitlySortedSamplingTests {
+        private static let minimum = Mutex<Int?>(nil)
+
+        @Test(
+            .compactMapIssues { issue in
+                guard let failure = issue.error as? SampleFailure else {
+                    return issue
+                }
+                ExplicitlySortedSamplingTests.minimum.withLock {
+                    $0 = failure.value
+                }
+                return nil
+            },
+            .hegel(searchSettings()),
+        )
+        func `shrinks in the supplied order`() async throws {
+            Self.minimum.withLock { $0 = nil }
+            let values = AnyCollection([30, 20, 10])
+
+            try await property { tc in
+                let value = try tc.draw(.sampled(from: values, sortedBy: <))
+                throw SampleFailure(value: value)
+            }
+
+            #expect(Self.minimum.withLock { $0 } == 10)
         }
     }
 }
