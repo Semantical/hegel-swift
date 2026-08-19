@@ -90,10 +90,9 @@ struct TextMachine {
 ```
 
 `Pool<Value>` lets later rules draw values created by earlier rules. While a
-state machine is running, its pools share an independent choice stream and can
-use the context-free operations below. Equal values remain distinct. A draw
-reuses an active value, while `take()` consumes it. A machine containing a pool
-is noncopyable and declares `~Copyable` explicitly:
+state machine is running, use its test case to access each pool. Equal values
+remain distinct. A draw reuses an active value, while a take consumes it. A
+machine containing a pool is noncopyable and declares `~Copyable` explicitly:
 
 ```swift
 @StateMachine
@@ -103,12 +102,12 @@ struct Machine: ~Copyable {
     @Rule
     mutating func create(tc: borrowing TestCase) throws {
         let id = try tc.draw(.integers)
-        try ids.add(id)
+        try tc.add(id, to: &ids)
     }
 
     @Rule
-    mutating func remove() throws {
-        let id = try ids.take()
+    mutating func remove(tc: borrowing TestCase) throws {
+        let id = try tc.take(from: &ids)
         // Remove id from the system under test.
     }
 }

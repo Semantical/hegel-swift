@@ -96,16 +96,6 @@ extension TestCase {
     public func run<Machine: StateMachine & ~Copyable>(
         _ machine: consuming Machine
     ) async throws {
-        var scope = _HegelScope.current
-        scope.poolTestCase = try PoolTestCase(self)
-        try await _HegelScope.$current.withValue(scope) {
-            try await runStateMachine(&machine)
-        }
-    }
-
-    private func runStateMachine<Machine: StateMachine & ~Copyable>(
-        _ machine: inout Machine
-    ) async throws {
         let rules = Machine.rules
         let invariants = Machine.invariants
         precondition(!rules.isEmpty, "A state machine requires at least one rule.")

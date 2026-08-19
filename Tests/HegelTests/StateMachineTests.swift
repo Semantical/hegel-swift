@@ -179,13 +179,13 @@ private struct MacroPoolMachine: ~Copyable {
     @Rule
     mutating func add(tc: borrowing TestCase) throws {
         let value = try tc.draw(.integers(in: 0...10))
-        try values.add(value)
+        try tc.add(value, to: &values)
         expected.append(value)
     }
 
     @Rule
-    mutating func reuse() throws {
-        let value = try values.draw()
+    mutating func reuse(tc: borrowing TestCase) throws {
+        let value = try tc.draw(from: values)
         #expect(expected.contains(value))
     }
 
