@@ -49,7 +49,7 @@ public struct HegelTrait: TestTrait, SuiteTrait, TestScoping {
                 guard context.owner === errorReporter else {
                     return issue
                 }
-                let isFirst = context.record()
+                let isFirst = context.record(issue.sourceLocation)
                 switch context.phase {
                 case .exploring:
                     return nil

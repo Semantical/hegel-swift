@@ -19,6 +19,41 @@ private var minimalIntegerComment: [Comment] {
 @Suite
 struct PropertyTests {
     @Test
+    func `issue context preserves its first assertion origin`() {
+        let context = _HegelIssueContext(fallbackOrigin: "property.swift:1")
+
+        #expect(
+            context.record(
+                SourceLocation(
+                    fileID: "Module/First.swift",
+                    filePath: "/tmp/First.swift",
+                    line: 12,
+                    column: 34,
+                )
+            )
+        )
+        #expect(
+            !context.record(
+                SourceLocation(
+                    fileID: "Module/Second.swift",
+                    filePath: "/tmp/Second.swift",
+                    line: 56,
+                    column: 78,
+                )
+            )
+        )
+        #expect(context.issueOrigin == "Module/First.swift:12:34")
+    }
+
+    @Test
+    func `issue context falls back to the property origin`() {
+        let context = _HegelIssueContext(fallbackOrigin: "property.swift:1")
+
+        #expect(context.record(nil))
+        #expect(context.issueOrigin == "property.swift:1")
+    }
+
+    @Test
     func `requires the Hegel trait`() async {
         let error = await #expect(throws: HegelError.self) {
             try await property { _ in }

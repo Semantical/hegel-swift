@@ -1,7 +1,8 @@
 import Synchronization
+package import Testing
 
 /// One exploration or replay attempt observed by Swift Testing.
-final class _HegelIssueContext: Sendable {
+package final class _HegelIssueContext: Sendable {
     enum Phase: Sendable {
         case exploring
         case replaying(reproduction: String)
@@ -9,24 +10,46 @@ final class _HegelIssueContext: Sendable {
 
     let phase: Phase
     let owner: _HegelErrorReporter?
-    private let recorded = Atomic(false)
+    private let fallbackOrigin: String
+    private let recordedIssueOrigin = Mutex<String?>(nil)
     private let stateMachineRules = Mutex<[String]?>(nil)
 
     init(
         phase: Phase,
         owner: _HegelErrorReporter?,
+        fallbackOrigin: String,
     ) {
         self.phase = phase
         self.owner = owner
+        self.fallbackOrigin = fallbackOrigin
+    }
+
+    package convenience init(fallbackOrigin: String) {
+        self.init(
+            phase: .exploring,
+            owner: nil,
+            fallbackOrigin: fallbackOrigin,
+        )
     }
 
     /// Records an issue and returns whether it was the first for this attempt.
-    func record() -> Bool {
-        !recorded.exchange(true, ordering: .relaxed)
+    package func record(_ sourceLocation: SourceLocation?) -> Bool {
+        let origin = sourceLocation.map {
+            "\($0.fileID):\($0.line):\($0.column)"
+        } ?? fallbackOrigin
+        return recordedIssueOrigin.withLock { recordedIssueOrigin in
+            guard recordedIssueOrigin == nil else { return false }
+            recordedIssueOrigin = origin
+            return true
+        }
+    }
+
+    package var issueOrigin: String? {
+        recordedIssueOrigin.withLock { $0 }
     }
 
     var hasRecordedIssue: Bool {
-        recorded.load(ordering: .relaxed)
+        issueOrigin != nil
     }
 
     func beginStateMachine() {

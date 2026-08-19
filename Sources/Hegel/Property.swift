@@ -191,6 +191,7 @@ public func property(
         let issueContext = _HegelIssueContext(
             phase: .exploring,
             owner: scope.errorReporter,
+            fallbackOrigin: origin,
         )
         var attemptScope = scope
         attemptScope.issueContext = issueContext
@@ -199,7 +200,7 @@ public func property(
             try await _HegelScope.$current.withValue(attemptScope) {
                 try await property(testCase)
             }
-            status = issueContext.hasRecordedIssue ? .interesting(origin) : .valid
+            status = issueContext.issueOrigin.map(TestStatus.interesting) ?? .valid
         } catch let error as CancellationError {
             throw error
         } catch TestControl.invalid {
@@ -207,7 +208,7 @@ public func property(
         } catch TestControl.overrun {
             status = .overrun
         } catch {
-            status = .interesting(origin)
+            status = .interesting(issueContext.issueOrigin ?? origin)
         }
         try testCase.complete(status)
     }
@@ -240,6 +241,7 @@ func replay(
     let issueContext = _HegelIssueContext(
         phase: .replaying(reproduction: reproduction),
         owner: scope.errorReporter,
+        fallbackOrigin: origin,
     )
     var attemptScope = scope
     attemptScope.issueContext = issueContext
@@ -257,7 +259,7 @@ func replay(
         try testCase.complete(.overrun)
         throw HegelError("The reproduction no longer matches the property's draws.")
     } catch {
-        try testCase.complete(.interesting(origin))
+        try testCase.complete(.interesting(issueContext.issueOrigin ?? origin))
         guard !issueContext.hasRecordedIssue else {
             return
         }
@@ -271,7 +273,7 @@ func replay(
     }
 
     if issueContext.hasRecordedIssue {
-        try testCase.complete(.interesting(origin))
+        try testCase.complete(.interesting(issueContext.issueOrigin ?? origin))
         return
     }
 
