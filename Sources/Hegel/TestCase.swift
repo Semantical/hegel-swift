@@ -276,12 +276,12 @@ public struct TestCase: ~Copyable {
         of element: Gen<Element>,
         size: ValidatedSizeBounds,
     ) throws -> [Element] {
-        try withCollection(
+        unsafe try withCollection(
             label: UInt64(HEGEL_LABEL_LIST.rawValue),
             size: size,
-        ) { collectionID in
+        ) { collection in
             var elements: [Element] = []
-            while try collectionHasMore(collectionID) {
+            while unsafe try collectionHasMore(collection) {
                 let value = try withSpan(
                     label: HEGEL_LABEL_LIST_ELEMENT
                 ) {
@@ -299,13 +299,13 @@ public struct TestCase: ~Copyable {
     ) throws -> Set<Element> {
         let domain = element.enumeratedValues.map(unique)
         let size = try collectionSize(size, limitedTo: domain?.count)
-        return try withCollection(
+        return unsafe try withCollection(
             label: UInt64(HEGEL_LABEL_SET.rawValue),
             size: size,
-        ) { collectionID in
+        ) { collection in
             var values: Set<Element> = []
             var available = domain
-            while try collectionHasMore(collectionID) {
+            while unsafe try collectionHasMore(collection) {
                 let candidate = try withSpan(
                     label: HEGEL_LABEL_SET_ELEMENT
                 ) {
@@ -316,7 +316,7 @@ public struct TestCase: ~Copyable {
                     return try element.draw(self)
                 }
                 guard values.insert(candidate).inserted else {
-                    try reject(collectionID)
+                    unsafe try reject(collection)
                     continue
                 }
             }
@@ -331,13 +331,13 @@ public struct TestCase: ~Copyable {
     ) throws -> [Key: Value] {
         let domain = keys.enumeratedValues.map(unique)
         let size = try collectionSize(size, limitedTo: domain?.count)
-        return try withCollection(
+        return unsafe try withCollection(
             label: UInt64(HEGEL_LABEL_MAP.rawValue),
             size: size,
-        ) { collectionID in
+        ) { collection in
             var dictionary: [Key: Value] = [:]
             var available = domain
-            while try collectionHasMore(collectionID) {
+            while unsafe try collectionHasMore(collection) {
                 try checkDraw(
                     unsafe hegel_start_span(
                         context.handle,
@@ -359,7 +359,7 @@ public struct TestCase: ~Copyable {
                 }
                 guard dictionary.index(forKey: key) == nil else {
                     do {
-                        try reject(collectionID)
+                        unsafe try reject(collection)
                     } catch {
                         _ = unsafe hegel_stop_span(context.handle, handle, false)
                         throw error
@@ -452,42 +452,48 @@ public struct TestCase: ~Copyable {
     private func withCollection<Result>(
         label: UInt64,
         size: ValidatedSizeBounds,
-        _ body: (Int64) throws -> Result,
+        _ body: (OpaquePointer) throws -> Result,
     ) throws -> Result {
         try withSpan(label: label) {
-            var collectionID: Int64 = 0
+            var collection: OpaquePointer?
             try checkDraw(
                 unsafe hegel_new_collection(
                     context.handle,
                     handle,
                     UInt64(size.minimum),
                     size.cMaximum,
-                    &collectionID,
+                    &collection,
                 )
             )
-            return try body(collectionID)
+            guard let collection = unsafe collection else {
+                throw HegelError("Hegel returned an empty collection handle.")
+            }
+            defer {
+                _ = unsafe hegel_collection_free(context.handle, collection)
+            }
+            return unsafe try body(collection)
         }
     }
 
-    private func collectionHasMore(_ collectionID: Int64) throws -> Bool {
+    private func collectionHasMore(_ collection: OpaquePointer) throws -> Bool {
         var more = false
         try checkDraw(
             unsafe hegel_collection_more(
                 context.handle,
                 handle,
-                collectionID,
+                collection,
                 &more,
             )
         )
         return more
     }
 
-    private func reject(_ collectionID: Int64) throws {
+    private func reject(_ collection: OpaquePointer) throws {
         try checkDraw(
             unsafe hegel_collection_reject(
                 context.handle,
                 handle,
-                collectionID,
+                collection,
                 nil,
             )
         )

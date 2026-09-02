@@ -25,7 +25,7 @@ public struct Rule<Machine: ~Copyable> {
     }
 }
 
-/// A named property checked initially and after every successful rule.
+/// A named property checked initially, finally, and at Hegel-selected join points.
 public struct Invariant<Machine: ~Copyable> {
     var name: StaticString
     var check: (borrowing Machine, borrowing TestCase) async throws -> Void
@@ -102,31 +102,66 @@ extension TestCase {
         let issueContext = _HegelScope.current.issueContext
         issueContext?.beginStateMachine()
 
-        let stateMachineID = try stateMachine(
+        let stateMachine = unsafe try stateMachine(
             rules: rules.map(\.name),
             invariants: invariants.map(\.name),
         )
+        defer {
+            _ = unsafe hegel_state_machine_free(context.handle, stateMachine)
+        }
         guard try await check(invariants, against: machine) else {
             return
         }
 
-        while let index = try nextRule(in: stateMachineID, count: rules.count) {
-            issueContext?.recordStateMachineRule(rules[index].name)
-            do {
-                try await rules[index].apply(&machine, self)
-            } catch TestControl.invalid {
+        while unsafe try startNextGroup(in: stateMachine) {
+            while let index = unsafe try nextRule(in: stateMachine, count: rules.count) {
+                issueContext?.recordStateMachineRule(rules[index].name)
+                do {
+                    try await rules[index].apply(&machine, self)
+                } catch TestControl.invalid {
+                    guard !hasRecordedIssue else {
+                        return
+                    }
+                    unsafe try rejectRule(in: stateMachine)
+                    continue
+                }
                 guard !hasRecordedIssue else {
                     return
                 }
+            }
+            guard unsafe try await checkSampled(
+                invariants,
+                against: machine,
+                in: stateMachine,
+            ) else {
+                return
+            }
+            #if os(WASI)
+            await Task.yield()
+            #endif
+        }
+        _ = try await check(invariants, against: machine)
+    }
+
+    private func checkSampled<Machine: ~Copyable>(
+        _ invariants: [Invariant<Machine>],
+        against machine: borrowing Machine,
+        in stateMachine: OpaquePointer,
+    ) async throws -> Bool {
+        for (index, invariant) in invariants.enumerated() {
+            guard unsafe try shouldCheckInvariant(index, in: stateMachine) else {
                 continue
             }
-            guard !hasRecordedIssue else {
-                return
+            do {
+                try await invariant.check(machine, self)
+            } catch TestControl.invalid where hasRecordedIssue {
+                return false
             }
-            guard try await check(invariants, against: machine) else {
-                return
+            guard !hasRecordedIssue else {
+                return false
             }
         }
+        return true
     }
 
     private var hasRecordedIssue: Bool {
@@ -153,45 +188,101 @@ extension TestCase {
     private func stateMachine(
         rules: [StaticString],
         invariants: [StaticString],
-    ) throws -> Int64 {
+    ) throws -> OpaquePointer {
+        let groups = Array(repeating: Int64(0), count: rules.count)
         let rules = CStringArray(rules)
         let invariants = CStringArray(invariants)
-        var stateMachineID: Int64 = 0
-        try unsafe rules.withUnsafePointers { rulePointers, ruleCount in
-            try unsafe invariants.withUnsafePointers { invariantPointers, invariantCount in
-                try checkDraw(
-                    unsafe hegel_new_state_machine(
-                        context.handle,
-                        handle,
-                        rulePointers,
-                        ruleCount,
-                        invariantPointers,
-                        invariantCount,
-                        &stateMachineID,
+        var stateMachine: OpaquePointer?
+        var concurrency: Int64 = 0
+        try unsafe groups.withUnsafeBufferPointer { groups in
+            try unsafe rules.withUnsafePointers { rulePointers, ruleCount in
+                try unsafe invariants.withUnsafePointers { invariantPointers, invariantCount in
+                    try checkDraw(
+                        unsafe hegel_new_state_machine(
+                            context.handle,
+                            handle,
+                            rulePointers,
+                            groups.baseAddress,
+                            ruleCount,
+                            invariantPointers,
+                            invariantCount,
+                            1,
+                            1,
+                            &stateMachine,
+                            &concurrency,
+                        )
                     )
-                )
+                }
             }
         }
-        return stateMachineID
+        guard concurrency == 1 else {
+            throw HegelError("Hegel selected unexpected state-machine concurrency.")
+        }
+        guard let stateMachine = unsafe stateMachine else {
+            throw HegelError("Hegel returned an empty state-machine handle.")
+        }
+        return unsafe stateMachine
     }
 
-    private func nextRule(in stateMachineID: Int64, count: Int) throws -> Int? {
-        var index = Int64(HEGEL_STATE_MACHINE_DONE)
+    private func startNextGroup(in stateMachine: OpaquePointer) throws -> Bool {
+        var group = Int64.min
+        try checkDraw(
+            unsafe hegel_state_machine_next_group(
+                context.handle,
+                handle,
+                stateMachine,
+                &group,
+            )
+        )
+        return group != Int64.min
+    }
+
+    private func nextRule(in stateMachine: OpaquePointer, count: Int) throws -> Int? {
+        var index = Int64.min
         try checkDraw(
             unsafe hegel_state_machine_next_rule(
                 context.handle,
                 handle,
-                stateMachineID,
+                stateMachine,
+                0,
                 &index,
             )
         )
-        guard index != HEGEL_STATE_MACHINE_DONE else {
+        guard index != Int64.min else {
             return nil
         }
         guard index >= 0, index < count else {
             throw HegelError("Hegel selected an unknown state-machine rule.")
         }
         return Int(index)
+    }
+
+    private func rejectRule(in stateMachine: OpaquePointer) throws {
+        try checkDraw(
+            unsafe hegel_state_machine_rule_rejected(
+                context.handle,
+                handle,
+                stateMachine,
+                0,
+            )
+        )
+    }
+
+    private func shouldCheckInvariant(
+        _ index: Int,
+        in stateMachine: OpaquePointer,
+    ) throws -> Bool {
+        var shouldCheck = false
+        try checkDraw(
+            unsafe hegel_state_machine_should_check_invariant(
+                context.handle,
+                handle,
+                stateMachine,
+                Int64(index),
+                &shouldCheck,
+            )
+        )
+        return shouldCheck
     }
 }
 

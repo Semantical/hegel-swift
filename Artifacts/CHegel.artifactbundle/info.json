@@ -2,7 +2,7 @@
   "schemaVersion": "1.0",
   "artifacts": {
     "chegel": {
-      "version": "0.30.3",
+      "version": "0.34.0",
       "type": "staticLibrary",
       "variants": [
         {
@@ -57,6 +57,18 @@
           "path": "x86_64-unknown-windows-msvc/hegel_c.lib",
           "supportedTriples": [
             "x86_64-unknown-windows-msvc"
+          ],
+          "staticLibraryMetadata": {
+            "headerPaths": [
+              "include"
+            ],
+            "moduleMapPath": "include/module.modulemap"
+          }
+        },
+        {
+          "path": "wasm32-unknown-wasip1/libhegel_c.a",
+          "supportedTriples": [
+            "wasm32-unknown-wasip1"
           ],
           "staticLibraryMetadata": {
             "headerPaths": [
