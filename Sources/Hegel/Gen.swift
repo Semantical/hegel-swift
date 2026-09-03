@@ -112,14 +112,6 @@ extension Gen {
         }
     }
 
-    /// Creates a generator whose definition can refer to itself.
-    public static func recursive(_ definition: (Self) -> Self) -> Self {
-        let deferred = DeferredGeneratorDefinition<Value>()
-        let recursive = deferred.generator
-        deferred.set(definition(recursive))
-        return recursive
-    }
-
     /// Transforms generated values without changing their choices.
     public func map<NewValue>(
         _ transform: @escaping (Value) throws -> NewValue

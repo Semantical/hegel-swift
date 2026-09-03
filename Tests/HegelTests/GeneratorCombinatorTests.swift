@@ -20,6 +20,15 @@ private indirect enum Tree {
             left.leaves + right.leaves
         }
     }
+
+    var depth: Int {
+        switch self {
+        case .leaf:
+            0
+        case .branch(let left, let right):
+            1 + max(left.depth, right.depth)
+        }
+    }
 }
 
 private enum Direction: CaseIterable {
@@ -155,18 +164,21 @@ struct GeneratorCombinatorTests {
 
     @Test(.hegel(generationSettings()))
     func `supports recursive generator definitions`() async throws {
-        let recursive = Gen<Tree>.recursive { tree in
-            let branch = Gen<(Tree, Tree)>.tuple(tree, tree)
+        let recursive = Gen<Tree>.recursive(
+            maxDepth: 8,
+            maxLeaves: 16,
+        ) { tree in
+            Gen<(Tree, Tree)>.tuple(tree, tree)
                 .map { Tree.branch($0, $1) }
-            return .oneOf(
-                Gen.integers(in: 10...20).map(Tree.leaf),
-                branch,
-            )
+        } leaf: {
+            Gen.integers(in: 10...20).map(Tree.leaf)
         }
 
         try await property { tc in
             let tree = try tc.draw(recursive)
             #expect(tree.leaves.allSatisfy { (10...20).contains($0) })
+            #expect(tree.leaves.count <= 16)
+            #expect(tree.depth <= 8)
         }
     }
 
