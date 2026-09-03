@@ -62,9 +62,16 @@ extension Gen {
     /// Generates one of the supplied values after putting them in a deterministic total order.
     public static func sampled(
         from values: some Collection<Value>,
-        sortedBy areInIncreasingOrder: (Value, Value) -> Bool
+        sortedBy areInIncreasingOrder: (Value, Value) -> Bool,
     ) -> Self {
         sampled(from: values.sorted(by: areInIncreasingOrder))
+    }
+
+    /// Generates one of the supplied values after putting them in a deterministic total order.
+    @_disfavoredOverload
+    public static func sampled(from values: some Collection<Value>) -> Self
+    where Value: Comparable {
+        sampled(from: values.sorted())
     }
 
     /// Returns a generator over the supplied values, or `nil` when they are empty.
@@ -78,7 +85,7 @@ extension Gen {
     /// Returns a stably ordered generator, or `nil` when no values are supplied.
     public static func sampledIfPresent(
         from values: some Collection<Value>,
-        sortedBy areInIncreasingOrder: (Value, Value) -> Bool
+        sortedBy areInIncreasingOrder: (Value, Value) -> Bool,
     ) -> Self? {
         guard !values.isEmpty else { return nil }
         return sampled(from: values, sortedBy: areInIncreasingOrder)
