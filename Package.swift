@@ -51,7 +51,7 @@ var package = Package(
             ],
             swiftSettings: swiftSettings,
             linkerSettings: [
-                .linkedLibrary("ntdll", .when(platforms: [.windows])),
+                .linkedLibrary("ntdll", .when(platforms: [.windows]))
             ],
         ),
         .macro(

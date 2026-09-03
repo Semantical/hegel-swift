@@ -20,14 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - run: swift --version
-      - run: swift test -q
+      - run: swift test
 
   cross-platform:
     uses: swiftlang/github-workflows/.github/workflows/swift_package_test.yml@497d9ab8410e69981b3b2f28da24cf7bf4b8733d
     with:
       enable_linux_checks: true
+      enable_wasm_sdk_build: true
       enable_windows_checks: true
       linux_swift_versions: '["6.3"]'
+      wasm_sdk_versions: '["6.3"]'
+      wasm_sdk_build_command: swift test --disable-default-traits --disable-xctest
       windows_swift_versions: '["6.3"]'
 
   tag:
