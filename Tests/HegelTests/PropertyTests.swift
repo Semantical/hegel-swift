@@ -223,6 +223,13 @@ struct PropertyTests {
         }
 
         @Test(
+            .disabled("TODO: Look into WASI persistence") {
+                #if os(WASI)
+                true
+                #else
+                false
+                #endif
+            },
             .compactMapIssues { issue in
                 guard issue.comments == minimalIntegerComment else {
                     return issue
