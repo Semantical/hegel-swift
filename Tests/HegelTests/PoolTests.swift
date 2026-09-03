@@ -4,8 +4,8 @@ import Testing
 @Suite
 struct PoolTests {
     @Test(.hegel(generationSettings(testCases: 10)))
-    func `explicit operations work outside a state machine`() async throws {
-        try await property { tc in
+    func `explicit operations work outside a state machine`() throws {
+        try property { tc in
             var values = Pool<Int>()
             try tc.add(1, to: &values)
             let drawn = try tc.draw(from: values)

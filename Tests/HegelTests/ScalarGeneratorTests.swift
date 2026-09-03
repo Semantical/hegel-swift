@@ -4,8 +4,8 @@ import Testing
 @Suite
 struct ScalarGeneratorTests {
     @Test(.hegel(generationSettings(testCases: 50)))
-    func `integer generators honor bounded ranges`() async throws {
-        try await property { tc in
+    func `integer generators honor bounded ranges`() throws {
+        try property { tc in
             let closed = try tc.draw(.integers(in: -128 ... -100))
             let halfOpen = try tc.draw(.integers(in: -10..<10))
             let unsigned = try tc.draw(
@@ -19,8 +19,8 @@ struct ScalarGeneratorTests {
     }
 
     @Test(.hegel(generationSettings(testCases: 50)))
-    func `integer generators honor one-sided ranges`() async throws {
-        try await property { tc in
+    func `integer generators honor one-sided ranges`() throws {
+        try property { tc in
             let lowerBounded = try tc.draw(.integers(in: 10...))
             let upperBounded = try tc.draw(.integers(in: ...10))
             let exclusiveUpper = try tc.draw(.integers(in: ..<10))
@@ -32,8 +32,8 @@ struct ScalarGeneratorTests {
     }
 
     @Test(.hegel(generationSettings(testCases: 50)))
-    func `floating-point generators honor range endpoints`() async throws {
-        try await property { tc in
+    func `floating-point generators honor range endpoints`() throws {
+        try property { tc in
             let float = try tc.draw(.floats(in: -10..<10))
             let double = try tc.draw(.doubles(in: -10..<10))
             let upperBoundedFloat = try tc.draw(.floats(in: ...10))

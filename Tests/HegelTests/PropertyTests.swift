@@ -54,19 +54,19 @@ struct PropertyTests {
     }
 
     @Test
-    func `requires the Hegel trait`() async {
-        let error = await #expect(throws: HegelError.self) {
-            try await property { _ in }
+    func `requires the Hegel trait`() {
+        let error = #expect(throws: HegelError.self) {
+            try property { _ in }
         }
         #expect(error?.description == "`property` requires the `.hegel` trait.")
     }
 
     @Test(.hegel(generationSettings(testCases: 3)))
-    func `rejects cases that violate assumptions`() async throws {
+    func `rejects cases that violate assumptions`() throws {
         var attempts = 0
         var accepted: [Int] = []
 
-        try await property { tc in
+        try property { tc in
             attempts += 1
             let value = try tc.draw(.integers(in: 0...1))
             try tc.assume(value == 1)
@@ -79,17 +79,17 @@ struct PropertyTests {
     }
 
     @Test(.hegel(generationSettings(testCases: 1)))
-    func `propagates cancellation`() async {
-        await #expect(throws: CancellationError.self) {
-            try await property { _ in
+    func `propagates cancellation`() {
+        #expect(throws: CancellationError.self) {
+            try property { _ in
                 throw CancellationError()
             }
         }
     }
 
     @Test(.hegel(generationSettings(testCases: 3)))
-    func `rejects duplicate targeting labels`() async throws {
-        try await property { tc in
+    func `rejects duplicate targeting labels`() throws {
+        try property { tc in
             try tc.target(1, label: "size")
             #expect(throws: HegelError.self) {
                 try tc.target(2, label: "size")
@@ -111,10 +111,10 @@ struct PropertyTests {
             },
             .hegel(searchSettings()),
         )
-        func `shrinks thrown errors`() async throws {
+        func `shrinks thrown errors`() throws {
             Self.capturedIssue.withLock { $0 = nil }
 
-            try await property { tc in
+            try property { tc in
                 let value = try tc.draw(.integers(in: 0...100))
                 guard value < 5 else {
                     throw BoundaryFailure(value: value)
@@ -141,10 +141,10 @@ struct PropertyTests {
             },
             .hegel(searchSettings()),
         )
-        func `shrinks Swift Testing expectations`() async throws {
+        func `shrinks Swift Testing expectations`() throws {
             Self.capturedIssue.withLock { $0 = nil }
 
-            try await property { tc in
+            try property { tc in
                 let value = try tc.draw(.integers(in: 0...100))
                 #expect(value < 5)
             }
@@ -155,17 +155,17 @@ struct PropertyTests {
     }
 
     @Test(.hegel.reproducing(minimalIntegerReproduction))
-    func `replays an example configured by the trait`() async throws {
-        try await property { tc in
+    func `replays an example configured by the trait`() throws {
+        try property { tc in
             let value = try tc.draw(.integers(in: 0...100))
             #expect(value == 5)
         }
     }
 
     @Test(.hegel.reproducing(minimalIntegerReproduction))
-    func `reports a rejected replay`() async {
-        let error = await #expect(throws: HegelError.self) {
-            try await property { tc in
+    func `reports a rejected replay`() {
+        let error = #expect(throws: HegelError.self) {
+            try property { tc in
                 try tc.assume(false)
             }
         }
@@ -173,9 +173,9 @@ struct PropertyTests {
     }
 
     @Test(.hegel.reproducing(minimalIntegerReproduction))
-    func `reports replay draw mismatches`() async {
-        let error = await #expect(throws: HegelError.self) {
-            try await property { tc in
+    func `reports replay draw mismatches`() {
+        let error = #expect(throws: HegelError.self) {
+            try property { tc in
                 _ = try tc.draw(.integers(in: 0...100))
                 _ = try tc.draw(.integers(in: 0...100))
             }
@@ -187,9 +187,9 @@ struct PropertyTests {
     }
 
     @Test(.hegel.reproducing("not-a-reproduction"))
-    func `rejects malformed reproductions`() async {
-        await #expect(throws: HegelError.self) {
-            try await property { _ in }
+    func `rejects malformed reproductions`() {
+        #expect(throws: HegelError.self) {
+            try property { _ in }
         }
     }
 
@@ -212,8 +212,8 @@ struct PropertyTests {
             return settings
         }
 
-        private static func runProperty() async throws {
-            try await property { tc in
+        private static func runProperty() throws {
+            try property { tc in
                 propertyCalls.withLock { $0 += 1 }
                 let value = try tc.draw(.integers(in: 0...100))
                 guard value < 5 else {
@@ -239,7 +239,7 @@ struct PropertyTests {
             },
             .hegel(DatabaseTests.settings),
         )
-        func `reuses persisted counterexamples`() async throws {
+        func `reuses persisted counterexamples`() throws {
             try? FileManager.default.removeItem(atPath: Self.path)
             defer {
                 try? FileManager.default.removeItem(atPath: Self.path)
@@ -247,11 +247,11 @@ struct PropertyTests {
             Self.capturedIssueCount.withLock { $0 = 0 }
             Self.propertyCalls.withLock { $0 = 0 }
 
-            try await Self.runProperty()
+            try Self.runProperty()
             let explorationCalls = Self.propertyCalls.withLock { $0 }
 
             Self.propertyCalls.withLock { $0 = 0 }
-            try await Self.runProperty()
+            try Self.runProperty()
             let reuseCalls = Self.propertyCalls.withLock { $0 }
 
             #expect(reuseCalls < explorationCalls)

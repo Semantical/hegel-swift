@@ -151,7 +151,22 @@ struct Run: ~Copyable {
     }
 }
 
-/// Searches for a counterexample to an async throwing Swift Testing property.
+/// Searches for a counterexample to a synchronous throwing Swift Testing property.
+///
+/// Draw values from the borrowed test case. Swift Testing issues and errors
+/// escaping `property` mark that case as interesting. Hegel shrinks the case,
+/// then reports the native issue or rethrows the original error from its final
+/// replay. Apply the `.hegel` trait to the containing test or suite.
+public func property(
+    fileID: StaticString = #fileID,
+    line: UInt = #line,
+    _ property: (borrowing TestCase) throws -> Void,
+) throws {
+    let runner = try PropertyRunner(fileID: fileID, line: line)
+    try runner.run(property)
+}
+
+/// Searches for a counterexample to an asynchronous throwing Swift Testing property.
 ///
 /// Draw values from the borrowed test case. Swift Testing issues and errors
 /// escaping `property` mark that case as interesting. Hegel shrinks the case,
@@ -162,124 +177,266 @@ public func property(
     line: UInt = #line,
     _ property: (borrowing TestCase) async throws -> Void,
 ) async throws {
-    let origin = "\(fileID):\(line)"
-    let scope = _HegelScope.current
-    guard Test.current != nil else {
-        throw HegelError("`property` must be called from a Swift Testing test.")
-    }
-    guard let databaseKey = scope.databaseKey, scope.errorReporter != nil else {
-        throw HegelError("`property` requires the `.hegel` trait.")
-    }
-    let settings = try CSettings(
-        scope.settings ?? .init(),
-        databaseKey: databaseKey,
-    )
+    let runner = try PropertyRunner(fileID: fileID, line: line)
+    try await runner.run(property)
+}
 
-    if let reproduction = scope.reproduction {
-        try await replay(
-            reproduction,
-            settings: settings,
-            origin: origin,
-            failureExpected: false,
-            property,
-        )
-        return
-    }
+private struct ReplayRequest {
+    var reproduction: String
+    var origin: String
+    var failureExpected: Bool
+}
 
-    var run = try Run(settings: settings)
-    while let testCase = try run.next() {
-        let issueContext = _HegelIssueContext(
-            phase: .exploring,
-            owner: scope.errorReporter,
-            fallbackOrigin: origin,
-        )
-        var attemptScope = scope
-        attemptScope.issueContext = issueContext
-        let status: TestStatus
-        do {
-            try await _HegelScope.$current.withValue(attemptScope) {
-                try await property(testCase)
-            }
-            status = issueContext.issueOrigin.map(TestStatus.interesting) ?? .valid
-        } catch let error as CancellationError {
-            throw error
-        } catch TestControl.invalid {
-            status = .invalid
-        } catch TestControl.overrun {
-            status = .overrun
-        } catch {
-            status = .interesting(issueContext.issueOrigin ?? origin)
+@safe
+private struct PropertyRunner: ~Copyable {
+    var origin: String
+    var scope: _HegelScope
+    var settings: CSettings
+
+    init(fileID: StaticString, line: UInt) throws {
+        let scope = _HegelScope.current
+        guard Test.current != nil else {
+            throw HegelError("`property` must be called from a Swift Testing test.")
         }
-        try testCase.complete(status)
+        guard let databaseKey = scope.databaseKey, scope.errorReporter != nil else {
+            throw HegelError("`property` requires the `.hegel` trait.")
+        }
+        let settings = try CSettings(
+            scope.settings ?? .init(),
+            databaseKey: databaseKey,
+        )
+        self.origin = "\(fileID):\(line)"
+        self.scope = scope
+        self.settings = consume settings
     }
 
-    switch try run.summary() {
-    case .passed:
-        return
-    case .error(let message):
-        throw HegelError(message)
-    case .failed(let failure):
-        try await replay(
-            failure.reproduction,
-            settings: settings,
-            origin: failure.origin,
-            failureExpected: true,
-            property,
+    consuming func run(
+        _ property: (borrowing TestCase) throws -> Void
+    ) throws {
+        if let replay = configuredReplay {
+            try run(replay, property)
+            return
+        }
+
+        var run = try Run(settings: settings)
+        while let testCase = try run.next() {
+            try attempt().run(consume testCase, property)
+        }
+        guard let replay = try replay(after: run) else {
+            return
+        }
+        try self.run(replay, property)
+    }
+
+    consuming func run(
+        _ property: (borrowing TestCase) async throws -> Void
+    ) async throws {
+        if let replay = configuredReplay {
+            try await run(replay, property)
+            return
+        }
+
+        var run = try Run(settings: settings)
+        while let testCase = try run.next() {
+            try await attempt().run(consume testCase, property)
+        }
+        guard let replay = try replay(after: run) else {
+            return
+        }
+        try await self.run(replay, property)
+    }
+
+    private var configuredReplay: ReplayRequest? {
+        scope.reproduction.map {
+            ReplayRequest(
+                reproduction: $0,
+                origin: origin,
+                failureExpected: false,
+            )
+        }
+    }
+
+    private func replay(after run: borrowing Run) throws -> ReplayRequest? {
+        switch try run.summary() {
+        case .passed:
+            return nil
+        case .error(let message):
+            throw HegelError(message)
+        case .failed(let failure):
+            return ReplayRequest(
+                reproduction: failure.reproduction,
+                origin: failure.origin,
+                failureExpected: true,
+            )
+        }
+    }
+
+    private func attempt() -> PropertyAttempt {
+        PropertyAttempt(
+            scope: scope,
+            origin: origin,
+            phase: .exploring,
         )
+    }
+
+    private func run(
+        _ replay: ReplayRequest,
+        _ property: (borrowing TestCase) throws -> Void,
+    ) throws {
+        let testCase = try makeReplay(replay.reproduction, settings: settings)
+        let attempt = PropertyAttempt(
+            scope: scope,
+            origin: replay.origin,
+            phase: .replaying(
+                reproduction: replay.reproduction,
+                failureExpected: replay.failureExpected,
+            ),
+        )
+        try attempt.run(consume testCase, property)
+    }
+
+    private func run(
+        _ replay: ReplayRequest,
+        _ property: (borrowing TestCase) async throws -> Void,
+    ) async throws {
+        let testCase = try makeReplay(replay.reproduction, settings: settings)
+        let attempt = PropertyAttempt(
+            scope: scope,
+            origin: replay.origin,
+            phase: .replaying(
+                reproduction: replay.reproduction,
+                failureExpected: replay.failureExpected,
+            ),
+        )
+        try await attempt.run(consume testCase, property)
     }
 }
 
-func replay(
-    _ reproduction: String,
-    settings: borrowing CSettings,
-    origin: String,
-    failureExpected: Bool,
-    _ property: (borrowing TestCase) async throws -> Void,
-) async throws {
-    let testCase = try makeReplay(reproduction, settings: settings)
-    let scope = _HegelScope.current
-    let issueContext = _HegelIssueContext(
-        phase: .replaying(reproduction: reproduction),
-        owner: scope.errorReporter,
-        fallbackOrigin: origin,
-    )
-    var attemptScope = scope
-    attemptScope.issueContext = issueContext
+private struct PropertyAttempt {
+    enum Phase {
+        case exploring
+        case replaying(reproduction: String, failureExpected: Bool)
+    }
 
-    do {
-        try await _HegelScope.$current.withValue(attemptScope) {
-            try await property(testCase)
+    var scope: _HegelScope
+    var issueContext: _HegelIssueContext
+    var origin: String
+    var phase: Phase
+
+    init(
+        scope: _HegelScope,
+        origin: String,
+        phase: Phase,
+    ) {
+        let issuePhase: _HegelIssueContext.Phase
+        switch phase {
+        case .exploring:
+            issuePhase = .exploring
+        case .replaying(let reproduction, _):
+            issuePhase = .replaying(reproduction: reproduction)
         }
-    } catch let error as CancellationError {
-        throw error
-    } catch TestControl.invalid {
-        try testCase.complete(.invalid)
-        throw HegelError("The reproduced test case was rejected.")
-    } catch TestControl.overrun {
-        try testCase.complete(.overrun)
-        throw HegelError("The reproduction no longer matches the property's draws.")
-    } catch {
-        try testCase.complete(.interesting(issueContext.issueOrigin ?? origin))
-        guard !issueContext.hasRecordedIssue else {
-            return
+        let issueContext = _HegelIssueContext(
+            phase: issuePhase,
+            owner: scope.errorReporter,
+            fallbackOrigin: origin,
+        )
+        var scope = scope
+        scope.issueContext = issueContext
+        self.scope = scope
+        self.issueContext = issueContext
+        self.origin = origin
+        self.phase = phase
+    }
+
+    func run(
+        _ testCase: consuming TestCase,
+        _ property: (borrowing TestCase) throws -> Void,
+    ) throws {
+        let error: (any Error)?
+        do {
+            try _HegelScope.$current.withValue(scope) {
+                try property(testCase)
+            }
+            error = nil
+        } catch let caughtError {
+            error = caughtError
         }
-        guard let errorReporter = scope.errorReporter else {
+        try complete(consume testCase, after: error)
+    }
+
+    func run(
+        _ testCase: consuming TestCase,
+        _ property: (borrowing TestCase) async throws -> Void,
+    ) async throws {
+        let error: (any Error)?
+        do {
+            try await _HegelScope.$current.withValue(scope) {
+                try await property(testCase)
+            }
+            error = nil
+        } catch let caughtError {
+            error = caughtError
+        }
+        try complete(consume testCase, after: error)
+    }
+
+    private func complete(
+        _ testCase: consuming TestCase,
+        after error: (any Error)?,
+    ) throws {
+        if let error = error as? CancellationError {
             throw error
         }
-        _HegelScope.$current.withValue(attemptScope) {
-            errorReporter(error)
+        switch phase {
+        case .exploring:
+            let status: TestStatus
+            if let control = error as? TestControl {
+                switch control {
+                case .invalid:
+                    status = .invalid
+                case .overrun:
+                    status = .overrun
+                }
+            } else if error != nil {
+                status = .interesting(issueContext.issueOrigin ?? origin)
+            } else {
+                status = issueContext.issueOrigin.map(TestStatus.interesting) ?? .valid
+            }
+            try testCase.complete(status)
+
+        case .replaying(_, let failureExpected):
+            if let control = error as? TestControl {
+                switch control {
+                case .invalid:
+                    try testCase.complete(.invalid)
+                    throw HegelError("The reproduced test case was rejected.")
+                case .overrun:
+                    try testCase.complete(.overrun)
+                    throw HegelError("The reproduction no longer matches the property's draws.")
+                }
+            }
+            if let error {
+                try testCase.complete(.interesting(issueContext.issueOrigin ?? origin))
+                guard !issueContext.hasRecordedIssue else {
+                    return
+                }
+                guard let errorReporter = scope.errorReporter else {
+                    throw error
+                }
+                _HegelScope.$current.withValue(scope) {
+                    errorReporter(error)
+                }
+                return
+            }
+            if issueContext.hasRecordedIssue {
+                try testCase.complete(.interesting(issueContext.issueOrigin ?? origin))
+                return
+            }
+            try testCase.complete(.valid)
+            guard !failureExpected else {
+                throw HegelError("The minimal counterexample no longer failed during replay.")
+            }
         }
-        return
-    }
-
-    if issueContext.hasRecordedIssue {
-        try testCase.complete(.interesting(issueContext.issueOrigin ?? origin))
-        return
-    }
-
-    try testCase.complete(.valid)
-    guard !failureExpected else {
-        throw HegelError("The minimal counterexample no longer failed during replay.")
     }
 }
 

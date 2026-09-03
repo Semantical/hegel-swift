@@ -10,10 +10,10 @@ struct SettingsTests {
             .database(.disabled)
             .phases([.generate])
     )
-    func `configures the number of test cases`() async throws {
+    func `configures the number of test cases`() throws {
         var calls = 0
 
-        try await property { tc in
+        try property { tc in
             calls += 1
             _ = try tc.draw(Gen<UInt64>.integers)
         }
@@ -22,10 +22,10 @@ struct SettingsTests {
     }
 
     @Test(.hegel.verbosity(.quiet).database(.disabled).phases([]))
-    func `can disable every lifecycle phase`() async throws {
+    func `can disable every lifecycle phase`() throws {
         var calls = 0
 
-        try await property { _ in
+        try property { _ in
             calls += 1
         }
 
@@ -40,14 +40,14 @@ struct SettingsTests {
             .database(.disabled)
             .phases([.generate])
     )
-    func `a fixed seed reproduces generated choices`() async throws {
+    func `a fixed seed reproduces generated choices`() throws {
         var first: [UInt64] = []
         var second: [UInt64] = []
 
-        try await property { tc in
+        try property { tc in
             first.append(try tc.draw(.integers))
         }
-        try await property { tc in
+        try property { tc in
             second.append(try tc.draw(.integers))
         }
 
@@ -62,14 +62,14 @@ struct SettingsTests {
             .database(.disabled)
             .phases([.generate])
     )
-    func `derandomization stabilizes unseeded runs`() async throws {
+    func `derandomization stabilizes unseeded runs`() throws {
         var first: [UInt64] = []
         var second: [UInt64] = []
 
-        try await property { tc in
+        try property { tc in
             first.append(try tc.draw(.integers))
         }
-        try await property { tc in
+        try property { tc in
             second.append(try tc.draw(.integers))
         }
 

@@ -5,10 +5,10 @@ import Testing
 @Suite
 struct CollectionGeneratorTests {
     @Test(.hegel(generationSettings(testCases: 50)))
-    func `variable-sized generators honor lower bounds`() async throws {
+    func `variable-sized generators honor lower bounds`() throws {
         let keys = Gen.sampled(from: 0..<20)
 
-        try await property { tc in
+        try property { tc in
             let bytes = try tc.draw(.bytes(size: 11...))
             let string = try tc.draw(.strings(size: 11...))
             let array = try tc.draw(.arrays(of: .booleans, size: 11...))
@@ -30,8 +30,8 @@ struct CollectionGeneratorTests {
     }
 
     @Test(.hegel(generationSettings(testCases: 50)))
-    func `byte and string generators honor upper bounds`() async throws {
-        try await property { tc in
+    func `byte and string generators honor upper bounds`() throws {
+        try property { tc in
             let bytes = try tc.draw(.bytes(size: ..<13))
             let string = try tc.draw(.strings(size: ...8))
 
@@ -41,15 +41,15 @@ struct CollectionGeneratorTests {
     }
 
     @Test(.hegel(generationSettings()))
-    func `character generators produce one Unicode scalar`() async throws {
-        try await property { tc in
+    func `character generators produce one Unicode scalar`() throws {
+        try property { tc in
             let character = try tc.draw(.characters)
             #expect(character.unicodeScalars.count == 1)
         }
     }
 
     @Test(.hegel(generationSettings()))
-    func `fixed product generators preserve their element domains`() async throws {
+    func `fixed product generators preserve their element domains`() throws {
         let tuple = Gen<(UInt8, String)>.tuple(
             Gen.integers(UInt8.self, in: 200...255),
             .strings(size: ...8),
@@ -58,7 +58,7 @@ struct CollectionGeneratorTests {
             of: .integers(in: 200...255)
         )
 
-        try await property { tc in
+        try property { tc in
             let (integer, string) = try tc.draw(tuple)
             let fixed = try tc.draw(inlineArray)
 
@@ -69,10 +69,10 @@ struct CollectionGeneratorTests {
     }
 
     @Test(.hegel(generationSettings()))
-    func `unordered collections use each finite-domain value at most once`() async throws {
+    func `unordered collections use each finite-domain value at most once`() throws {
         let keys = Gen.sampled(from: [1, 1, 2, 3])
 
-        try await property { tc in
+        try property { tc in
             let set = try tc.draw(.sets(of: keys, size: 3..<9))
             let dictionary = try tc.draw(
                 .dictionaries(
@@ -92,14 +92,14 @@ struct CollectionGeneratorTests {
     }
 
     @Test(.hegel(generationSettings()))
-    func `does not draw values for rejected dictionary keys`() async throws {
+    func `does not draw values for rejected dictionary keys`() throws {
         let valueDraws = Mutex(0)
         let values = Gen.integers.map { value in
             valueDraws.withLock { $0 += 1 }
             return value
         }
 
-        try await property { tc in
+        try property { tc in
             valueDraws.withLock { $0 = 0 }
             let dictionary = try tc.draw(
                 .dictionaries(
@@ -131,10 +131,10 @@ struct CollectionGeneratorTests {
             },
             .hegel(searchSettings()),
         )
-        func `shrinks collection structure and elements`() async throws {
+        func `shrinks collection structure and elements`() throws {
             Self.capturedFailure.withLock { $0 = nil }
 
-            try await property { tc in
+            try property { tc in
                 let values = try tc.draw(
                     .arrays(of: .integers(in: 0...100), size: 0...10)
                 )

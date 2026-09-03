@@ -10,8 +10,8 @@ import Hegel
 import Testing
 
 @Test(.hegel)
-func sorting() async throws {
-    try await property { tc in
+func sorting() throws {
+    try property { tc in
         let values = try tc.draw(.arrays(of: .integers))
         #expect(values.sorted().count == values.count)
     }
