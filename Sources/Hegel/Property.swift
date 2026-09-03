@@ -187,6 +187,11 @@ private struct ReplayRequest {
     var failureExpected: Bool
 }
 
+#if os(WASI)
+@concurrent
+private func prepareAttempt() async {}
+#endif
+
 @safe
 private struct PropertyRunner: ~Copyable {
     var origin: String
@@ -238,6 +243,10 @@ private struct PropertyRunner: ~Copyable {
 
         var run = try Run(settings: settings)
         while let testCase = try run.next() {
+            #if os(WASI)
+            // Prevent synchronous async completions from growing the Wasm stack.
+            await prepareAttempt()
+            #endif
             try await attempt().run(consume testCase, property)
         }
         guard let replay = try replay(after: run) else {
