@@ -233,12 +233,16 @@ extension Gen where Value == Bool {
 }
 
 extension Gen where Value == Float {
-    /// Generates floating-point values, including special values.
+    /// Generates finite floating-point values, including subnormal values.
     public static var floats: Self {
         floats()
     }
 
     /// Generates floating-point values within the given bounds.
+    ///
+    /// NaN is excluded unless explicitly allowed. Infinity is allowed by default
+    /// only when the range has an unbounded endpoint. The default range has both
+    /// endpoints, so it produces finite values. Subnormal values are allowed by default.
     public static func floats(
         in range: some RangeBounds<Float> = -.infinity ... .infinity,
         allowingNaN: Bool? = nil,
@@ -270,12 +274,16 @@ extension Gen where Value == Float {
 }
 
 extension Gen where Value == Double {
-    /// Generates floating-point values, including special values.
+    /// Generates finite floating-point values, including subnormal values.
     public static var doubles: Self {
         doubles()
     }
 
     /// Generates floating-point values within the given bounds.
+    ///
+    /// NaN is excluded unless explicitly allowed. Infinity is allowed by default
+    /// only when the range has an unbounded endpoint. The default range has both
+    /// endpoints, so it produces finite values. Subnormal values are allowed by default.
     public static func doubles(
         in range: some RangeBounds<Double> = -.infinity ... .infinity,
         allowingNaN: Bool? = nil,

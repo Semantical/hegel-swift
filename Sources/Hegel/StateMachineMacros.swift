@@ -11,7 +11,7 @@ public macro StateMachine() =
 public macro Rule() =
     #externalMacro(module: "HegelMacrosPlugin", type: "RuleMacro")
 
-/// Marks a property checked initially and after each successful rule.
+/// Marks a property checked initially, finally, and at Hegel-selected join points.
 @attached(peer)
 public macro Invariant() =
     #externalMacro(module: "HegelMacrosPlugin", type: "InvariantMacro")

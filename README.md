@@ -1,143 +1,65 @@
-# hegel-swift
+# Hegel for Swift
 
-![Swift 6.3+](https://img.shields.io/badge/Swift-6.3%2B-F05138?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1NiA1NiI%2BPHBhdGggZmlsbD0iI0ZGRiIgZD0ibTQ3LjA2IDM2LjY2LS4wMDQtLjAwNGMuMDY2LS4yMjQuMTM0LS40NDYuMTkxLS42NzUgMi40NjUtOS44MjEtMy41NS0yMS40MzItMTMuNzMxLTI3LjU0NiA0LjQ2MSA2LjA0OCA2LjQzNCAxMy4zNzQgNC42ODEgMTkuNzgtLjE1Ni41NzEtLjM0NCAxLjEyLS41NTIgMS42NTMtLjIyNS0uMTQ4LS41MS0uMzE2LS44OS0uNTI3IDAgMC0xMC4xMjctNi4yNTItMjEuMTAzLTE3LjMxMi0uMjg4LS4yOSA1Ljg1MiA4Ljc3NyAxMi44MjIgMTYuMTQtMy4yODQtMS44NDMtMTIuNDM0LTguNS0xOC4yMjctMTMuODAyLjcxMiAxLjE4NyAxLjU1OCAyLjMzIDIuNDg5IDMuNDNDMTcuNTczIDIzLjkzMiAyMy44ODIgMzEuNSAzMS40NCAzNy4zMTRjLTUuMzEgMy4yNS0xMi44MTQgMy41MDItMjAuMjg1LjAwM2EzMC42NDYgMzAuNjQ2IDAgMCAxLTUuMTkzLTMuMDk4YzMuMTYyIDUuMDU4IDguMDMzIDkuNDIzIDEzLjk2IDExLjk3IDcuMDcgMy4wMzkgMTQuMSAyLjgzMyAxOS4zMzYuMDVsLS4wMDQuMDA3Yy4wMjQtLjAxNi4wNTUtLjAzMi4wOC0uMDQ3LjIxNC0uMTE2LjQyOC0uMjM0LjYzNi0uMzU4IDIuNTE2LTEuMzA2IDcuNDg1LTIuNjMgMTAuMTUyIDIuNTU5LjY1NCAxLjI3IDIuMDQxLTUuNDYtMy4wNjEtMTEuNzR6Ii8%2BPC9zdmc%2B) ![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-blue)
+Property-based testing for [Swift Testing](https://github.com/swiftlang/swift-testing), powered by [Hegel](https://github.com/hegeldev/hegel-rust). Hegel generates test inputs and shrinks failures to small counterexamples.
 
-An idiomatic Swift interface to [Hegel](https://github.com/hegeldev/hegel-rust), 
-the property-based testing engine based on Hypothesis.
+## Installation
+
+Add the package to your `Package.swift` dependencies:
+
+```swift
+.package(url: "https://github.com/semantical/hegel-swift", from: "0.2.0")
+```
+
+Then add its `Hegel` product to your test target:
+
+```swift
+.product(name: "Hegel", package: "hegel-swift")
+```
+
+The package requires Swift 6.3 or later. The bundled libraries cover these targets:
+
+| Platform | Architectures |
+| --- | --- |
+| Linux (glibc) | arm64, x86_64 |
+| macOS 26 or later | arm64 |
+| Windows (MSVC) | arm64, x86_64 |
+| WebAssembly (WASI Preview 1) | wasm32 |
+
+The `HegelMacros` trait is enabled by default. To use Hegel without its state-machine macros, add `traits: []` to the package dependency. When working on this repository, `swift test --disable-default-traits` selects that same configuration.
+
+## Writing a property
+
+Use `#expect` inside `property`, with the `.hegel` trait on the test:
 
 ```swift
 import Hegel
 import Testing
 
 @Test(.hegel)
-func sorting() throws {
-    try property { tc in
-        let values = try tc.draw(.arrays(of: .integers))
-        #expect(values.sorted().count == values.count)
+func reversingTwice() throws {
+    try property { testCase in
+        let values: [Int] = try testCase.draw(.arrays(of: .integers))
+        #expect(Array(values.reversed().reversed()) == values)
     }
 }
 ```
 
-`property` runs inside a Swift Testing test with the `.hegel` trait, applied
-directly or inherited from a containing suite.
+The trait can also be inherited from a containing `@Suite`. For asynchronous code, use `try await property`. Swift Testing parameterized tests are not supported; draw the arguments from the test case instead.
 
-Expectation failures produced while Hegel searches and shrinks are suppressed.
-Swift Testing reports the first expectation from the minimal counterexample with
-Hegel's reproduction blob attached as a comment.
+`Gen` includes generators for numbers, strings, collections, and tuples. Compose them with `map`, `flatMap`, or a `Gen { testCase in ... }` closure. Use `recursive` for trees, with separate branch and leaf generators.
 
-Generators compose:
+For stateful tests, `@StateMachine` collects methods marked with `@Rule` and `@Invariant`. Hegel generates and shrinks sequences of rules. Invariants run at the start and end of each sequence and at points selected by Hegel. See the [state-machine tests](Tests/HegelTests/StateMachineTests.swift) for examples.
 
-```swift
-let user = Gen<(UInt64, String)> { tc in
-    let identifier = try tc.draw(.integers)
-    let name = try tc.draw(.strings(size: 1...40))
-    return (identifier, name)
-}
+## Failures and configuration
 
-let users = Gen<[(UInt64, String)]>.arrays(
-    of: user.filter { !$0.1.isEmpty },
-    size: 0...100,
-)
-```
+The library suppresses intermediate expectation failures while searching and shrinking. Swift Testing reports the failure from the minimized case with a reproduction blob attached. To replay it, temporarily use `@Test(.hegel.reproducing("..."))`, then remove the reproduction setting to resume normal exploration.
 
-The core generator vocabulary includes `constant`, `cases`, `recursive`, `map`,
-`flatMap`, `filter`, `oneOf`, `optional`, and `sampled(from:)`, along with
-fixed-width integers, floating-point values, booleans, bytes, Unicode scalars,
-characters, strings, arrays, sets, dictionaries, and arbitrary tuple arities.
+By default, Hegel runs up to 100 valid cases and stores failures under `.hegel/examples` for later runs. Add `.hegel/` to your `.gitignore`. Recognized CI environments disable the default database; use `.database(.path("..."))` if you want to keep it in a CI cache.
 
-`sampled(from:)` preserves the iteration order of a bidirectional collection,
-which must remain stable when a failure is reproduced in another process. Pass
-an explicit deterministic total order through `sortedBy` when sampling another
-collection. Use `sampledIfPresent` when the collection may be empty.
+Configure individual tests or suites through the trait, for example `@Test(.hegel.testCases(1_000).database(.disabled))`. See [Settings](Sources/Hegel/Settings.swift) for the available options.
 
-State machines exercise systems through sequences of named rules. Hegel chooses
-and shrinks the rule sequence, while invariants are checked initially and after
-every successful rule.
+## Bundled binaries
 
-Declare rules and invariants as ordinary instance methods:
+Hegel is a Rust dependency, so we currently build its static libraries ourselves, pending [upstream static artifact publication](https://github.com/hegeldev/hegel-rust/pull/383). The package includes these builds in `Artifacts/CHegel.artifactbundle`. You do not need a Rust toolchain to use it.
 
-```swift
-@StateMachine
-struct TextMachine {
-    var text = ""
-    var model: [Character] = []
-
-    @Rule
-    mutating func append(tc: borrowing TestCase) throws {
-        let character = try tc.draw(.characters)
-        text.append(character)
-        model.append(character)
-    }
-
-    @Rule
-    mutating func removeLast(tc: borrowing TestCase) throws {
-        try tc.assume(!model.isEmpty)
-        #expect(text.popLast() == model.removeLast())
-    }
-
-    @Invariant
-    func textMatchesModel() {
-        #expect(Array(text) == model)
-    }
-
-    @Test(.hegel)
-    static func property() async throws {
-        try await property { tc in
-            try await tc.run(Self())
-        }
-    }
-}
-```
-
-`Pool<Value>` lets later rules draw values created by earlier rules. While a
-state machine is running, use its test case to access each pool. Equal values
-remain distinct. A draw reuses an active value, while a take consumes it. A
-machine containing a pool is noncopyable and declares `~Copyable` explicitly:
-
-```swift
-@StateMachine
-struct Machine: ~Copyable {
-    var ids = Pool<Int>()
-
-    @Rule
-    mutating func create(tc: borrowing TestCase) throws {
-        let id = try tc.draw(.integers)
-        try tc.add(id, to: &ids)
-    }
-
-    @Rule
-    mutating func remove(tc: borrowing TestCase) throws {
-        let id = try tc.take(from: &ids)
-        // Remove id from the system under test.
-    }
-}
-```
-
-Hegel stores minimized failures under `.hegel/examples` and tries them before
-generating new examples. The `.hegel` trait keys this database by Swift
-Testing's test identity. Swift Testing parameterized tests are therefore not
-supported; draw arguments from the Hegel test case instead.
-
-Treat `.hegel/` as a generated local cache and exclude it from version control.
-Hegel disables the default database in recognized CI environments; configure a
-custom database path if it is backed by a persistent CI cache.
-
-To debug one exact failure, temporarily configure the test with its reproduction
-blob:
-
-```swift
-@Test(.hegel.reproducing("AAEAAAAACgEAAAAF"))
-```
-
-Remove the reproduction trait after fixing the failure so the test resumes
-exploration. Reproduction blobs are debugging artifacts; the database provides
-automatic regression reuse between exploratory runs.
-
-## Artifact
-
-The checked-in static library is Hegel 0.30.1 (`f81c6cceabe3c6695a249588c751a5ce93dffa00`) 
-for `arm64-apple-macosx`. It was built from `hegel-c` with:
-
-```sh
-cargo build --release -p hegeltest-c
-```
+The bundled engine is Hegel 0.34.0. Its supported target triples are listed in the [artifact manifest](Artifacts/CHegel.artifactbundle/info.json).
