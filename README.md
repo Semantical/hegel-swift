@@ -2,6 +2,9 @@
 
 Property-based testing for [Swift Testing](https://github.com/swiftlang/swift-testing), powered by [Hegel](https://github.com/hegeldev/hegel-rust). Hegel generates test inputs and shrinks failures to small counterexamples.
 
+> [!IMPORTANT]
+> `hegel-swift` is very much a work in progress. It ships custom-built Hegel binaries, breaking changes are expected, and `hegel-rust` itself is unstable.
+
 ## Installation
 
 Add the package to your `Package.swift` dependencies:
@@ -18,12 +21,12 @@ Then add its `Hegel` product to your test target:
 
 The package requires Swift 6.3 or later. The bundled libraries cover these targets:
 
-| Platform | Architectures |
-| --- | --- |
-| Linux (glibc) | arm64, x86_64 |
-| macOS 26 or later | arm64 |
-| Windows (MSVC) | arm64, x86_64 |
-| WebAssembly (WASI Preview 1) | wasm32 |
+| Platform                     | Architectures |
+|------------------------------|---------------|
+| Linux (glibc)                | arm64, x86_64 |
+| macOS 26 or later            | arm64         |
+| Windows (MSVC)               | arm64, x86_64 |
+| WebAssembly (WASI Preview 1) | wasm32        |
 
 The `HegelMacros` trait is enabled by default. To use Hegel without its state-machine macros, add `traits: []` to the package dependency. When working on this repository, `swift test --disable-default-traits` selects that same configuration.
 
@@ -38,7 +41,7 @@ import Testing
 @Test(.hegel)
 func reversingTwice() throws {
     try property { testCase in
-        let values: [Int] = try testCase.draw(.arrays(of: .integers))
+        let values = try testCase.draw(.arrays(of: .integers))
         #expect(Array(values.reversed().reversed()) == values)
     }
 }
@@ -62,4 +65,4 @@ Configure individual tests or suites through the trait, for example `@Test(.hege
 
 Hegel is a Rust dependency, so we currently build its static libraries ourselves, pending [upstream static artifact publication](https://github.com/hegeldev/hegel-rust/pull/383). The package includes these builds in `Artifacts/CHegel.artifactbundle`. You do not need a Rust toolchain to use it.
 
-The bundled engine is Hegel 0.34.0. Its supported target triples are listed in the [artifact manifest](Artifacts/CHegel.artifactbundle/info.json).
+The bundled engine is Hegel 0.34.0.
