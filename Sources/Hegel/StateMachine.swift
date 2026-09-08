@@ -205,6 +205,7 @@ extension TestCase {
                             groups.baseAddress,
                             ruleCount,
                             invariantPointers,
+                            nil,
                             invariantCount,
                             1,
                             1,

@@ -38,7 +38,9 @@ var package = Package(
     targets: [
         .binaryTarget(
             name: "CHegel",
-            path: "Artifacts/CHegel.artifactbundle",
+            url:
+                "https://github.com/Semantical/hegel-swift/releases/download/artifacts-0.37.5/CHegel-0.37.5.artifactbundle.zip",
+            checksum: "6f968292759cbe1408461825379c307f0d6e582fb0c1dac1792a599d1ab2209f",
         ),
         .target(
             name: "Hegel",
@@ -51,7 +53,9 @@ var package = Package(
             ],
             swiftSettings: swiftSettings,
             linkerSettings: [
-                .linkedLibrary("ntdll", .when(platforms: [.windows]))
+                .linkedLibrary("ntdll", .when(platforms: [.windows])),
+                .linkedLibrary("userenv", .when(platforms: [.windows])),
+                .linkedLibrary("ws2_32", .when(platforms: [.windows])),
             ],
         ),
         .macro(

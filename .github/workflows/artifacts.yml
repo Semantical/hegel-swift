@@ -1,0 +1,94 @@
+name: Publish C artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: Published hegel-rust tag (for example v0.37.5)
+        required: true
+        type: string
+      wasm_url:
+        description: Optional URL to experimental libhegel_c.a built from the same C release
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Package and publish artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+          WASM_URL: ${{ inputs.wasm_url }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, shutil, subprocess, tomllib, urllib.request
+          from pathlib import Path
+
+          def gh(*args):
+              return subprocess.check_output(["gh", *args], text=True).strip()
+
+          upstream = "repos/hegeldev/hegel-rust"
+          tag = os.environ["UPSTREAM_TAG"]
+          release = json.loads(gh("api", f"{upstream}/releases/tags/{tag}"))
+          def source(path):
+              return gh("api", f"{upstream}/contents/{path}?ref={tag}",
+                        "-H", "Accept: application/vnd.github.raw+json")
+
+          version = tomllib.loads(source("hegel-c/Cargo.toml"))["package"]["version"]
+          assets = {asset["name"]: asset for asset in release["assets"]}
+          bundle = Path("CHegel.artifactbundle")
+          variants = []
+          for name, path in {
+              "hegel.h": "include/hegel.h",
+              "libhegel-darwin-arm64.a": "arm64-apple-macosx/libhegel_c.a",
+              "libhegel-linux-arm64.a": "aarch64-unknown-linux-gnu/libhegel_c.a",
+              "libhegel-linux-amd64.a": "x86_64-unknown-linux-gnu/libhegel_c.a",
+              "libhegel-windows-arm64.lib": "aarch64-unknown-windows-msvc/hegel_c.lib",
+              "libhegel-windows-amd64.lib": "x86_64-unknown-windows-msvc/hegel_c.lib",
+          }.items():
+              asset = assets[name]
+              with urllib.request.urlopen(asset["browser_download_url"], timeout=120) as response:
+                  data = response.read()
+              if "sha256:" + hashlib.sha256(data).hexdigest() != asset["digest"]:
+                  raise ValueError(f"Checksum mismatch: {name}")
+              destination = bundle / path
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_bytes(data)
+              if name != "hegel.h":
+                  variants.append(path)
+          if wasm_url := os.environ["WASM_URL"]:
+              path = "wasm32-unknown-wasip1/libhegel_c.a"
+              (bundle / path).parent.mkdir(parents=True)
+              with urllib.request.urlopen(wasm_url, timeout=120) as response:
+                  (bundle / path).write_bytes(response.read())
+              variants.append(path)
+          (bundle / "include/module.modulemap").write_text('module CHegel { header "hegel.h" export * }\n')
+          (bundle / "LICENSE").write_text(source("LICENSE") + "\n")
+          (bundle / "info.json").write_text(json.dumps({
+              "schemaVersion": "1.0", "artifacts": {"chegel": {
+                  "version": version, "type": "staticLibrary", "variants": [
+                      {"path": path, "supportedTriples": [path.split("/")[0]],
+                       "staticLibraryMetadata": {"headerPaths": ["include"],
+                                                 "moduleMapPath": "include/module.modulemap"}}
+                      for path in variants
+                  ],
+              }},
+          }))
+          archive = Path(shutil.make_archive(f"CHegel-{version}.artifactbundle", "zip", ".", bundle.name))
+          checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
+          sidecar = archive.with_suffix(".zip.sha256")
+          sidecar.write_text(f"{checksum}  {archive.name}\n")
+          tag = f"artifacts-{version}"
+          gh("release", "create", tag, str(archive), str(sidecar),
+             "--target", os.environ["GITHUB_SHA"], "--draft", "--prerelease", "--latest=false",
+             "--title", tag, "--notes", f"hegel-c {version} from {release['html_url']}.\n\nSHA-256: `{checksum}`")
+          gh("release", "edit", tag, "--draft=false", "--latest=false")
+          url = f"https://github.com/{os.environ['GH_REPO']}/releases/download/{tag}/{archive.name}"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write(f"URL: {url}\n\nSHA-256: `{checksum}`\n")
+          PY
