@@ -8,6 +8,7 @@ Use `swift test -q`.
 
 ## Code
 
+- Tests must be falsifiable by defects in hegel-swift.
 - Always use `var` over `let` for stored struct properties.
 - Push for structured concurrency, avoid unstructured `Task` where possible. No @unchecked Sendable.
 - Keep the good path unindented with early returns.
