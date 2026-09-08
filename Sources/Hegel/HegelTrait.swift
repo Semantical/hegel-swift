@@ -83,6 +83,12 @@ public struct HegelTrait: TestTrait, SuiteTrait, TestScoping {
 }
 
 extension HegelTrait {
+    /// Prints recorded event statistics at the end of the run.
+    public consuming func showStatistics(_ enabled: Bool = true) -> Self {
+        configuredSettings.showStatistics = enabled
+        return self
+    }
+
     /// Sets the maximum number of valid test cases.
     public consuming func testCases(_ testCases: UInt64) -> Self {
         configuredSettings.testCases = testCases

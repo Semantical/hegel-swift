@@ -76,6 +76,8 @@ public struct Settings: Sendable {
     public var database: Database
     /// The property-test lifecycle phases to run.
     public var phases: Phases
+    /// Prints event frequencies and numeric distributions at the end of the run.
+    public var showStatistics: Bool
     /// Health checks that should not fail the run.
     ///
     /// `nil` preserves the engine defaults. Assigning even an empty
@@ -90,6 +92,7 @@ public struct Settings: Sendable {
         derandomize: Bool? = nil,
         database: Database = .default,
         phases: Phases = .all,
+        showStatistics: Bool = false,
         suppressedHealthChecks: HealthChecks? = nil,
     ) {
         self.testCases = testCases
@@ -98,6 +101,7 @@ public struct Settings: Sendable {
         self.derandomize = derandomize
         self.database = database
         self.phases = phases
+        self.showStatistics = showStatistics
         self.suppressedHealthChecks = suppressedHealthChecks
     }
 }
@@ -168,6 +172,13 @@ struct CSettings: ~Copyable {
                     )
                 )
             }
+            try context.check(
+                unsafe hegel_settings_set_show_statistics(
+                    context.handle,
+                    handle,
+                    settings.showStatistics,
+                )
+            )
             // One thrown invocation should produce one Swift Testing issue.
             try context.check(
                 unsafe hegel_settings_set_report_multiple_failures(

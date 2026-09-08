@@ -3,6 +3,19 @@ import Testing
 
 @Suite
 struct SettingsTests {
+    @Test(.hegel.testCases(3).database(.disabled).showStatistics())
+    func `event APIs forward observations and surface engine errors`() throws {
+        try property { tc in
+            let value = try tc.draw(Gen<Int16>.integers)
+            try tc.event("observed")
+            try tc.event("observed")
+            try tc.event(Double(value), label: "value")
+            try tc.event(0, label: "value")
+            #expect(throws: HegelError.self) { try tc.event(.infinity, label: "invalid") }
+            #expect(throws: HegelError.self) { try tc.event(.nan, label: "invalid") }
+        }
+    }
+
     @Test
     func `omitted health checks preserve the engine defaults`() {
         let settings = Settings()

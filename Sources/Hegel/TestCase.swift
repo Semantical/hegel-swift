@@ -61,6 +61,24 @@ public struct TestCase: ~Copyable {
         try context.check(result)
     }
 
+    /// Records an observation counted once per generated test case for this label.
+    /// Enable `Settings.showStatistics` to print the report.
+    public func event(_ label: String) throws(HegelError) {
+        let result = unsafe label.withCString { label in
+            unsafe hegel_event(context.handle, handle, label)
+        }
+        try context.check(result)
+    }
+
+    /// Records a finite numeric observation. A label may be observed repeatedly.
+    /// Enable `Settings.showStatistics` to print the distribution summary.
+    public func event(_ value: Double, label: String) throws(HegelError) {
+        let result = unsafe label.withCString { label in
+            unsafe hegel_event_value(context.handle, handle, value, label)
+        }
+        try context.check(result)
+    }
+
     consuming func complete(_ status: TestStatus) throws {
         let result: hegel_result_t
         switch status {
