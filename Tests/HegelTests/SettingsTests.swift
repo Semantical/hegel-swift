@@ -3,6 +3,25 @@ import Testing
 
 @Suite
 struct SettingsTests {
+    @Test
+    func `omitted health checks preserve the engine defaults`() {
+        let settings = Settings()
+
+        #expect(settings.suppressedHealthChecks == nil)
+    }
+
+    @Test
+    func `empty health checks can explicitly replace the engine defaults`() {
+        var settings = Settings()
+        settings.suppressedHealthChecks = []
+
+        #expect(settings.suppressedHealthChecks == [])
+        #expect(Settings(suppressedHealthChecks: []).suppressedHealthChecks == [])
+
+        settings.suppressedHealthChecks = nil
+        #expect(settings.suppressedHealthChecks == nil)
+    }
+
     @Test(
         .hegel
             .testCases(3)

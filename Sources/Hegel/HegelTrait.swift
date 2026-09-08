@@ -119,9 +119,9 @@ extension HegelTrait {
         return self
     }
 
-    /// Suppresses the given health checks.
+    /// Suppresses the given health checks, or restores engine defaults with `nil`.
     public consuming func suppressingHealthChecks(
-        _ healthChecks: Settings.HealthChecks
+        _ healthChecks: Settings.HealthChecks?
     ) -> Self {
         configuredSettings.suppressedHealthChecks = healthChecks
         return self

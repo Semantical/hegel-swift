@@ -4,7 +4,7 @@ import CHegel
 public struct Settings: Sendable {
     @nonexhaustive
     public enum Database: Sendable {
-        /// Uses `.hegel/examples` outside CI and disables the database in CI.
+        /// Uses the engine default: persistence is disabled in CI and Antithesis.
         case `default`
         /// Disables persistence and reuse of interesting examples.
         case disabled
@@ -77,7 +77,11 @@ public struct Settings: Sendable {
     /// The property-test lifecycle phases to run.
     public var phases: Phases
     /// Health checks that should not fail the run.
-    public var suppressedHealthChecks: HealthChecks
+    ///
+    /// `nil` preserves the engine defaults. Assigning even an empty
+    /// set replaces the CI suppression of `.tooSlow`. Inside Antithesis, the
+    /// engine disables all health checks regardless of this setting.
+    public var suppressedHealthChecks: HealthChecks?
 
     public init(
         testCases: UInt64 = 100,
@@ -86,7 +90,7 @@ public struct Settings: Sendable {
         derandomize: Bool? = nil,
         database: Database = .default,
         phases: Phases = .all,
-        suppressedHealthChecks: HealthChecks = [],
+        suppressedHealthChecks: HealthChecks? = nil,
     ) {
         self.testCases = testCases
         self.verbosity = verbosity
@@ -155,13 +159,15 @@ struct CSettings: ~Copyable {
                     settings.phases.rawValue,
                 )
             )
-            try context.check(
-                unsafe hegel_settings_set_suppress_health_check(
-                    context.handle,
-                    handle,
-                    settings.suppressedHealthChecks.rawValue,
+            if let suppressedHealthChecks = settings.suppressedHealthChecks {
+                try context.check(
+                    unsafe hegel_settings_set_suppress_health_check(
+                        context.handle,
+                        handle,
+                        suppressedHealthChecks.rawValue,
+                    )
                 )
-            )
+            }
             // One thrown invocation should produce one Swift Testing issue.
             try context.check(
                 unsafe hegel_settings_set_report_multiple_failures(
