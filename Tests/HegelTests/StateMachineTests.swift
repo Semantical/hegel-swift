@@ -5,6 +5,35 @@ import Testing
 @Suite
 struct StateMachineTests {
     @Test(.hegel(generationSettings()))
+    func `always checked invariants observe every intermediate state`() async throws {
+        try await property { tc in
+            try await tc.run(AlwaysCheckedMachine())
+        }
+    }
+
+    private struct AlwaysCheckedMachine: StateMachine {
+        final class Observation {
+            var steps = 0
+        }
+
+        var steps = 0
+        var observed = Observation()
+
+        static var rules: Rules {
+            rule("step") { machine, _ in
+                #expect(machine.observed.steps == machine.steps)
+                machine.steps += 1
+            }
+        }
+
+        static var invariants: Invariants {
+            invariant("observe", alwaysCheck: true) { machine in
+                machine.observed.steps = machine.steps
+            }
+        }
+    }
+
+    @Test(.hegel(generationSettings()))
     func `invariants can draw from the test case`() async throws {
         try await property { tc in
             try await tc.run(ContextInvariantMachine())

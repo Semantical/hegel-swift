@@ -141,6 +141,15 @@ public struct StateMachineMacro: MemberMacro, ExtensionMacro {
     ) -> ExprSyntax {
         let name = StringLiteralExprSyntax(content: function.name.text)
         let invocation = invocation(of: function)
+        if descriptor == "Invariant", let arguments = function.invariantArguments,
+            !arguments.isEmpty
+        {
+            return """
+                Hegel.Invariant(\(name), \(arguments)) { machine, tc in
+                    \(invocation)
+                }
+                """
+        }
         return """
             Hegel.\(raw: descriptor)(\(name)) { machine, tc in
                 \(invocation)

@@ -69,6 +69,58 @@ struct StateMachineMacroTests {
     }
 
     @Test
+    func `always checked invariant expansion`() {
+        assertMacroExpansion(
+            """
+            @StateMachine
+            struct PoolMachine {
+                @Rule
+                mutating func add(tc: borrowing TestCase) throws {}
+
+                @Rule
+                mutating func reset() async {}
+
+                @Invariant(alwaysCheck: true)
+                func `has expected contents`(_ tc: borrowing Hegel.TestCase) async throws {}
+            }
+            """,
+            expandedSource: """
+                struct PoolMachine {
+                    mutating func add(tc: borrowing TestCase) throws {}
+                    mutating func reset() async {}
+                    func `has expected contents`(_ tc: borrowing Hegel.TestCase) async throws {}
+
+                    static var rules: [Hegel.Rule<Self>] {
+                        [
+                        Hegel.Rule("add") { machine, tc in
+                            try machine.add(tc: tc)
+                        },
+                        Hegel.Rule("reset") { machine, tc in
+                            await machine.reset()
+                        },
+                        ]
+                    }
+
+                    static var invariants: [Hegel.Invariant<Self>] {
+                        [
+                        Hegel.Invariant("`has expected contents`", alwaysCheck: true) { machine, \
+                tc in
+                            try await machine.`has expected contents`(tc)
+                        },
+                        ]
+                    }
+                }
+
+                extension PoolMachine: Hegel.StateMachine {
+                }
+                """,
+            macroSpecs: macroSpecs,
+            indentationWidth: .spaces(4),
+            failureHandler: recordFailure,
+        )
+    }
+
+    @Test
     func `mutating invariant diagnostic`() {
         assertMacroExpansion(
             """

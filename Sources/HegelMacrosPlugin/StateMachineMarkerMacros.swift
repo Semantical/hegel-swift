@@ -188,6 +188,16 @@ private struct ValidationIssue {
 }
 
 extension FunctionDeclSyntax {
+    var invariantArguments: LabeledExprListSyntax? {
+        for case .attribute(let attribute) in attributes {
+            guard attribute.unqualifiedName == "Invariant",
+                case .argumentList(let arguments) = attribute.arguments
+            else { continue }
+            return arguments
+        }
+        return nil
+    }
+
     func hasAttribute(named name: String) -> Bool {
         attributes.contains { element in
             guard case .attribute(let attribute) = element else {

@@ -26,23 +26,29 @@ public struct Rule<Machine: ~Copyable> {
 }
 
 /// A named property checked initially, finally, and at Hegel-selected join points.
+/// Set `alwaysCheck` to check every join point instead of sampling.
 public struct Invariant<Machine: ~Copyable> {
     var name: StaticString
+    var alwaysCheck: Bool
     var check: (borrowing Machine, borrowing TestCase) async throws -> Void
 
     public init(
         _ name: StaticString,
+        alwaysCheck: Bool = false,
         _ check: @escaping (borrowing Machine, borrowing TestCase) async throws -> Void,
     ) {
         self.name = name
+        self.alwaysCheck = alwaysCheck
         self.check = check
     }
 
     public init(
         _ name: StaticString,
+        alwaysCheck: Bool = false,
         _ check: @escaping (borrowing Machine) async throws -> Void,
     ) {
         self.name = name
+        self.alwaysCheck = alwaysCheck
         self.check = { machine, _ in
             try await check(machine)
         }
@@ -78,16 +84,18 @@ extension StateMachine where Self: ~Copyable {
 
     public static func invariant(
         _ name: StaticString,
+        alwaysCheck: Bool = false,
         _ check: @escaping (borrowing Self, borrowing TestCase) async throws -> Void,
     ) -> Invariant<Self> {
-        Invariant(name, check)
+        Invariant(name, alwaysCheck: alwaysCheck, check)
     }
 
     public static func invariant(
         _ name: StaticString,
+        alwaysCheck: Bool = false,
         _ check: @escaping (borrowing Self) async throws -> Void,
     ) -> Invariant<Self> {
-        Invariant(name, check)
+        Invariant(name, alwaysCheck: alwaysCheck, check)
     }
 }
 
@@ -105,6 +113,7 @@ extension TestCase {
         let stateMachine = unsafe try stateMachine(
             rules: rules.map(\.name),
             invariants: invariants.map(\.name),
+            alwaysCheck: invariants.map(\.alwaysCheck),
         )
         defer {
             _ = unsafe hegel_state_machine_free(context.handle, stateMachine)
@@ -129,11 +138,13 @@ extension TestCase {
                     return
                 }
             }
-            guard unsafe try await checkSampled(
-                invariants,
-                against: machine,
-                in: stateMachine,
-            ) else {
+            guard
+                unsafe try await checkSampled(
+                    invariants,
+                    against: machine,
+                    in: stateMachine,
+                )
+            else {
                 return
             }
             #if os(WASI)
@@ -148,10 +159,8 @@ extension TestCase {
         against machine: borrowing Machine,
         in stateMachine: OpaquePointer,
     ) async throws -> Bool {
-        for (index, invariant) in invariants.enumerated() {
-            guard unsafe try shouldCheckInvariant(index, in: stateMachine) else {
-                continue
-            }
+        for (index, invariant) in invariants.enumerated()
+        where unsafe try shouldCheckInvariant(index, in: stateMachine) {
             do {
                 try await invariant.check(machine, self)
             } catch TestControl.invalid where hasRecordedIssue {
@@ -188,31 +197,34 @@ extension TestCase {
     private func stateMachine(
         rules: [StaticString],
         invariants: [StaticString],
+        alwaysCheck: [Bool],
     ) throws -> OpaquePointer {
         let groups = Array(repeating: Int64(0), count: rules.count)
         let rules = CStringArray(rules)
         let invariants = CStringArray(invariants)
         var stateMachine: OpaquePointer?
         var concurrency: Int64 = 0
-        try unsafe groups.withUnsafeBufferPointer { groups in
-            try unsafe rules.withUnsafePointers { rulePointers, ruleCount in
-                try unsafe invariants.withUnsafePointers { invariantPointers, invariantCount in
-                    try checkDraw(
-                        unsafe hegel_new_state_machine(
-                            context.handle,
-                            handle,
-                            rulePointers,
-                            groups.baseAddress,
-                            ruleCount,
-                            invariantPointers,
-                            nil,
-                            invariantCount,
-                            1,
-                            1,
-                            &stateMachine,
-                            &concurrency,
+        try unsafe alwaysCheck.withUnsafeBufferPointer { alwaysCheck in
+            try unsafe groups.withUnsafeBufferPointer { groups in
+                try unsafe rules.withUnsafePointers { rulePointers, ruleCount in
+                    try unsafe invariants.withUnsafePointers { invariantPointers, invariantCount in
+                        try checkDraw(
+                            unsafe hegel_new_state_machine(
+                                context.handle,
+                                handle,
+                                rulePointers,
+                                groups.baseAddress,
+                                ruleCount,
+                                invariantPointers,
+                                alwaysCheck.baseAddress,
+                                invariantCount,
+                                1,
+                                1,
+                                &stateMachine,
+                                &concurrency,
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
