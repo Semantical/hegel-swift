@@ -26,6 +26,9 @@ The package requires Swift 6.3 or later. SwiftPM downloads a checksum-pinned C a
 | Linux (glibc)                | arm64, x86_64 |
 | macOS 26 or later            | arm64         |
 | Windows (MSVC)               | arm64, x86_64 |
+| WASI Preview 1               | wasm32        |
+
+Wasm uses the matching Swift 6.3 Wasm SDK with `--disable-default-traits --disable-xctest`. The package supplies entropy and monotonic time through WASI. The upstream Wasm backend does not support filesystem persistence or concurrent state machines.
 
 The `HegelMacros` trait is enabled by default. To use Hegel without its state-machine macros, add `traits: []` to the package dependency. When working on this repository, `swift test --disable-default-traits` selects that same configuration.
 

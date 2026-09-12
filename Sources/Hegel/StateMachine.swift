@@ -220,6 +220,7 @@ extension TestCase {
                                 invariantCount,
                                 1,
                                 1,
+                                50,  // Preserve the previous engine default for sequential steps.
                                 &stateMachine,
                                 &concurrency,
                             )

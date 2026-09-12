@@ -223,7 +223,7 @@ struct PropertyTests {
         }
 
         @Test(
-            .disabled("TODO: Look into WASI persistence") {
+            .disabled("Hegel's Wasm backend does not support filesystem persistence.") {
                 #if os(WASI)
                 true
                 #else

@@ -39,8 +39,8 @@ var package = Package(
         .binaryTarget(
             name: "CHegel",
             url:
-                "https://github.com/Semantical/hegel-swift/releases/download/artifacts-0.37.5/CHegel-0.37.5.artifactbundle.zip",
-            checksum: "6f968292759cbe1408461825379c307f0d6e582fb0c1dac1792a599d1ab2209f",
+                "https://github.com/Semantical/hegel-swift/releases/download/artifacts-0.38.1/CHegel-0.38.1.artifactbundle.zip",
+            checksum: "9b46a1be2a3b8ff93e44ed412de7130363a42afbe1d215c44777efad7ee0aad8",
         ),
         .target(
             name: "Hegel",
