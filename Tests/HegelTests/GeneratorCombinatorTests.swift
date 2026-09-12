@@ -1,3 +1,4 @@
+import CHegel
 import Hegel
 import Synchronization
 import Testing
@@ -234,6 +235,37 @@ struct GeneratorCombinatorTests {
             }
 
             #expect(Self.minimum.withLock { $0 } == 10)
+        }
+    }
+}
+
+// MARK: - Generator identity
+
+@Suite
+struct GeneratorLabelTests {
+    @Test(.hegel(generationSettings()))
+    func `Swift label hashes agree with the engine`() throws {
+        try property { tc in
+            let name = try tc.draw(Gen<String>.strings)
+            try tc.assume(!name.utf8.contains(0))
+            var expected: UInt64 = 0
+            let result = unsafe name.withCString { name in
+                unsafe hegel_label_from_name(nil, name, &expected)
+            }
+            try #require(result == HEGEL_OK)
+            #expect(GeneratorLabel(name).rawValue == expected)
+
+            let values = try tc.draw(Gen.arrays(of: Gen<UInt64>.integers))
+            let combined = unsafe values.withUnsafeBufferPointer { values in
+                unsafe hegel_label_combine(nil, values.baseAddress, values.count, &expected)
+            }
+            try #require(combined == HEGEL_OK)
+            let labels = values.map { value in
+                var label = GeneratorLabel("")
+                label.rawValue = value
+                return label
+            }
+            #expect(GeneratorLabel(combining: labels).rawValue == expected)
         }
     }
 }

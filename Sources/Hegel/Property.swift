@@ -272,6 +272,9 @@ private struct PropertyRunner: ~Copyable {
         case .error(let message):
             throw HegelError(message)
         case .failed(let failure):
+            if try settings.shouldPrintReproduction() {
+                print("@Test(.hegel.reproducing(\(String(reflecting: failure.reproduction))))")
+            }
             return ReplayRequest(
                 reproduction: failure.reproduction,
                 origin: failure.origin,

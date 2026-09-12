@@ -85,6 +85,18 @@ public struct HegelTrait: TestTrait, SuiteTrait, TestScoping {
 }
 
 extension HegelTrait {
+    /// Selects an engine profile, with suite and test overrides applied over it.
+    public consuming func profile(_ name: String) -> Self {
+        configuredSettings.profile = name
+        return self
+    }
+
+    /// Prints a copy-pasteable reproduction trait after a failing search.
+    public consuming func printReproduction(_ enabled: Bool = true) -> Self {
+        configuredSettings.printReproduction = enabled
+        return self
+    }
+
     /// Prints recorded event statistics at the end of the run.
     public consuming func showStatistics(_ enabled: Bool = true) -> Self {
         configuredSettings.showStatistics = enabled
@@ -105,7 +117,7 @@ extension HegelTrait {
 
     /// Sets a fixed seed, or `nil` to choose one at run time.
     public consuming func seed(_ seed: UInt64?) -> Self {
-        configuredSettings.seed = seed.map(Settings.Seed.fixed) ?? .random
+        configuredSettings.seed = seed.map(Settings.Seed.fixed) ?? .automatic
         return self
     }
 
