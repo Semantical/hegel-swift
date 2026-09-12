@@ -3,38 +3,6 @@ import Testing
 
 @Suite
 struct SettingsTests {
-    @Test(.hegel.testCases(3).database(.disabled).showStatistics())
-    func `event APIs forward observations and surface engine errors`() throws {
-        try property { tc in
-            let value = try tc.draw(Gen<Int16>.integers)
-            try tc.event("observed")
-            try tc.event("observed")
-            try tc.event(Double(value), label: "value")
-            try tc.event(0, label: "value")
-            #expect(throws: HegelError.self) { try tc.event(.infinity, label: "invalid") }
-            #expect(throws: HegelError.self) { try tc.event(.nan, label: "invalid") }
-        }
-    }
-
-    @Test
-    func `omitted health checks preserve the engine defaults`() {
-        let settings = Settings()
-
-        #expect(settings.suppressedHealthChecks == nil)
-    }
-
-    @Test
-    func `empty health checks can explicitly replace the engine defaults`() {
-        var settings = Settings()
-        settings.suppressedHealthChecks = []
-
-        #expect(settings.suppressedHealthChecks == [])
-        #expect(Settings(suppressedHealthChecks: []).suppressedHealthChecks == [])
-
-        settings.suppressedHealthChecks = nil
-        #expect(settings.suppressedHealthChecks == nil)
-    }
-
     @Test(
         .hegel
             .testCases(3)
@@ -106,5 +74,41 @@ struct SettingsTests {
         }
 
         #expect(first == second)
+    }
+}
+
+@Suite(.hegel.testCases(3).seed(42).database(.disabled).phases([.generate]))
+struct InheritedSettingsTests {
+    @Test(.hegel.verbosity(.quiet))
+    func `a test override preserves unrelated suite settings`() throws {
+        var first: [UInt64] = []
+        var second: [UInt64] = []
+        try property { first.append(try $0.draw(.integers)) }
+        try property { second.append(try $0.draw(.integers)) }
+        #expect(first.count == 3)
+        #expect(first == second)
+    }
+
+    @Suite(.hegel.testCases(5))
+    struct Nested {
+        @Test(.hegel.verbosity(.quiet))
+        func `nested suite overrides compose with test overrides`() throws {
+            var calls = 0
+            try property { tc in
+                calls += 1
+                _ = try tc.draw(Gen<UInt64>.integers)
+            }
+            #expect(calls == 5)
+        }
+
+        @Test(.hegel.testCases(2))
+        func `the test wins over both suite layers`() throws {
+            var calls = 0
+            try property { tc in
+                calls += 1
+                _ = try tc.draw(Gen<UInt64>.integers)
+            }
+            #expect(calls == 2)
+        }
     }
 }

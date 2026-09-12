@@ -64,35 +64,37 @@ public struct Settings: Sendable {
         }
     }
 
-    /// The maximum number of valid test cases.
-    public var testCases: UInt64
-    /// The amount of engine diagnostic output.
-    public var verbosity: Verbosity
-    /// A fixed seed, or `nil` to choose one at run time.
-    public var seed: UInt64?
+    /// An explicit seed policy. Omit it to inherit the engine or suite setting.
+    public enum Seed: Sendable, Equatable {
+        case random
+        case fixed(UInt64)
+    }
+
+    /// The maximum number of valid test cases, or `nil` to inherit.
+    public var testCases: UInt64?
+    /// The amount of engine diagnostic output, or `nil` to inherit.
+    public var verbosity: Verbosity?
+    /// An explicit seed policy, or `nil` to inherit.
+    public var seed: Seed?
     /// Whether an unseeded run derives a stable seed from the test identifier.
     public var derandomize: Bool?
-    /// The location used to persist and reuse interesting examples.
-    public var database: Database
-    /// The property-test lifecycle phases to run.
-    public var phases: Phases
-    /// Prints event frequencies and numeric distributions at the end of the run.
-    public var showStatistics: Bool
-    /// Health checks that should not fail the run.
-    ///
-    /// `nil` preserves the engine defaults. Assigning even an empty
-    /// set replaces the CI suppression of `.tooSlow`. Inside Antithesis, the
-    /// engine disables all health checks regardless of this setting.
+    /// The location used to persist examples, or `nil` to inherit.
+    public var database: Database?
+    /// The property-test lifecycle phases to run, or `nil` to inherit.
+    public var phases: Phases?
+    /// Whether to print event statistics, or `nil` to inherit.
+    public var showStatistics: Bool?
+    /// Health checks to suppress, or `nil` to inherit. An empty set enables every check.
     public var suppressedHealthChecks: HealthChecks?
 
     public init(
-        testCases: UInt64 = 100,
-        verbosity: Verbosity = .normal,
-        seed: UInt64? = nil,
+        testCases: UInt64? = nil,
+        verbosity: Verbosity? = nil,
+        seed: Seed? = nil,
         derandomize: Bool? = nil,
-        database: Database = .default,
-        phases: Phases = .all,
-        showStatistics: Bool = false,
+        database: Database? = nil,
+        phases: Phases? = nil,
+        showStatistics: Bool? = nil,
         suppressedHealthChecks: HealthChecks? = nil,
     ) {
         self.testCases = testCases
@@ -104,6 +106,20 @@ public struct Settings: Sendable {
         self.showStatistics = showStatistics
         self.suppressedHealthChecks = suppressedHealthChecks
     }
+
+    func merging(_ overrides: Self) -> Self {
+        Self(
+            testCases: overrides.testCases ?? testCases,
+            verbosity: overrides.verbosity ?? verbosity,
+            seed: overrides.seed ?? seed,
+            derandomize: overrides.derandomize ?? derandomize,
+            database: overrides.database ?? database,
+            phases: overrides.phases ?? phases,
+            showStatistics: overrides.showStatistics ?? showStatistics,
+            suppressedHealthChecks: overrides.suppressedHealthChecks ?? suppressedHealthChecks,
+        )
+    }
+
 }
 
 @safe
@@ -125,28 +141,39 @@ struct CSettings: ~Copyable {
         }
 
         do {
-            try context.check(
-                unsafe hegel_settings_set_test_cases(
-                    context.handle,
-                    handle,
-                    settings.testCases,
+            if let testCases = settings.testCases {
+                try context.check(
+                    unsafe hegel_settings_set_test_cases(
+                        context.handle,
+                        handle,
+                        testCases,
+                    )
                 )
-            )
-            try context.check(
-                unsafe hegel_settings_set_verbosity(
-                    context.handle,
-                    handle,
-                    settings.verbosity.rawValue,
+            }
+            if let verbosity = settings.verbosity {
+                try context.check(
+                    unsafe hegel_settings_set_verbosity(
+                        context.handle,
+                        handle,
+                        verbosity.rawValue,
+                    )
                 )
-            )
-            try context.check(
-                unsafe hegel_settings_set_seed(
-                    context.handle,
-                    handle,
-                    settings.seed ?? 0,
-                    settings.seed != nil,
+            }
+            if let seed = settings.seed {
+                let value: UInt64?
+                switch seed {
+                case .random: value = nil
+                case .fixed(let fixed): value = fixed
+                }
+                try context.check(
+                    unsafe hegel_settings_set_seed(
+                        context.handle,
+                        handle,
+                        value ?? 0,
+                        value != nil,
+                    )
                 )
-            )
+            }
             if let derandomize = settings.derandomize {
                 try context.check(
                     unsafe hegel_settings_set_derandomize(
@@ -156,13 +183,15 @@ struct CSettings: ~Copyable {
                     )
                 )
             }
-            try context.check(
-                unsafe hegel_settings_set_phases(
-                    context.handle,
-                    handle,
-                    settings.phases.rawValue,
+            if let phases = settings.phases {
+                try context.check(
+                    unsafe hegel_settings_set_phases(
+                        context.handle,
+                        handle,
+                        phases.rawValue,
+                    )
                 )
-            )
+            }
             if let suppressedHealthChecks = settings.suppressedHealthChecks {
                 try context.check(
                     unsafe hegel_settings_set_suppress_health_check(
@@ -172,13 +201,15 @@ struct CSettings: ~Copyable {
                     )
                 )
             }
-            try context.check(
-                unsafe hegel_settings_set_show_statistics(
-                    context.handle,
-                    handle,
-                    settings.showStatistics,
+            if let showStatistics = settings.showStatistics {
+                try context.check(
+                    unsafe hegel_settings_set_show_statistics(
+                        context.handle,
+                        handle,
+                        showStatistics,
+                    )
                 )
-            )
+            }
             // One thrown invocation should produce one Swift Testing issue.
             try context.check(
                 unsafe hegel_settings_set_report_multiple_failures(
@@ -189,7 +220,7 @@ struct CSettings: ~Copyable {
             )
 
             switch settings.database {
-            case .default:
+            case nil, .default:
                 break
             case .disabled:
                 try context.check(

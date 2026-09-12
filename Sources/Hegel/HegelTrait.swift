@@ -68,7 +68,9 @@ public struct HegelTrait: TestTrait, SuiteTrait, TestScoping {
         }
 
         var scope = _HegelScope.current
-        scope.settings = settings ?? scope.settings
+        if let settings {
+            scope.settings = (scope.settings ?? Settings()).merging(settings)
+        }
         scope.databaseKey = test.id.description
         scope.reproduction = reproduction ?? scope.reproduction
         scope.errorReporter = errorReporter
@@ -103,7 +105,7 @@ extension HegelTrait {
 
     /// Sets a fixed seed, or `nil` to choose one at run time.
     public consuming func seed(_ seed: UInt64?) -> Self {
-        configuredSettings.seed = seed
+        configuredSettings.seed = seed.map(Settings.Seed.fixed) ?? .random
         return self
     }
 
@@ -125,7 +127,7 @@ extension HegelTrait {
         return self
     }
 
-    /// Suppresses the given health checks, or restores engine defaults with `nil`.
+    /// Suppresses the given health checks, or inherits with `nil`.
     public consuming func suppressingHealthChecks(
         _ healthChecks: Settings.HealthChecks?
     ) -> Self {
