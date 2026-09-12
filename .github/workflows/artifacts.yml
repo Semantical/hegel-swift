@@ -7,9 +7,6 @@ on:
         description: Published hegel-rust tag (for example v0.37.5)
         required: true
         type: string
-      wasm_url:
-        description: Optional URL to experimental libhegel_c.a built from the same C release
-        type: string
 
 permissions:
   contents: write
@@ -23,7 +20,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           UPSTREAM_TAG: ${{ inputs.upstream_tag }}
-          WASM_URL: ${{ inputs.wasm_url }}
         run: |
           python3 - <<'PY'
           import hashlib, json, os, shutil, subprocess, tomllib, urllib.request
@@ -50,6 +46,7 @@ jobs:
               "libhegel-linux-amd64.a": "x86_64-unknown-linux-gnu/libhegel_c.a",
               "libhegel-windows-arm64.lib": "aarch64-unknown-windows-msvc/hegel_c.lib",
               "libhegel-windows-amd64.lib": "x86_64-unknown-windows-msvc/hegel_c.lib",
+              "libhegel-wasm32-unknown-unknown.a": "wasm32-unknown-wasip1/libhegel_c.a",
           }.items():
               asset = assets[name]
               with urllib.request.urlopen(asset["browser_download_url"], timeout=120) as response:
@@ -61,12 +58,6 @@ jobs:
               destination.write_bytes(data)
               if name != "hegel.h":
                   variants.append(path)
-          if wasm_url := os.environ["WASM_URL"]:
-              path = "wasm32-unknown-wasip1/libhegel_c.a"
-              (bundle / path).parent.mkdir(parents=True)
-              with urllib.request.urlopen(wasm_url, timeout=120) as response:
-                  (bundle / path).write_bytes(response.read())
-              variants.append(path)
           (bundle / "include/module.modulemap").write_text('module CHegel { header "hegel.h" export * }\n')
           (bundle / "LICENSE").write_text(source("LICENSE") + "\n")
           (bundle / "info.json").write_text(json.dumps({
