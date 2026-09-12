@@ -76,7 +76,7 @@ jobs:
           sidecar.write_text(f"{checksum}  {archive.name}\n")
           tag = f"artifacts-{version}"
           gh("release", "create", tag, str(archive), str(sidecar),
-             "--target", os.environ["GITHUB_SHA"], "--draft", "--prerelease", "--latest=false",
+             "--target", os.environ["GITHUB_SHA"], "--draft", "--latest=false",
              "--title", tag, "--notes", f"hegel-c {version} from {release['html_url']}.\n\nSHA-256: `{checksum}`")
           gh("release", "edit", tag, "--draft=false", "--latest=false")
           url = f"https://github.com/{os.environ['GH_REPO']}/releases/download/{tag}/{archive.name}"

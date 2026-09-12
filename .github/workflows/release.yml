@@ -1,11 +1,11 @@
-name: Test
+name: Release
 
 on:
   pull_request:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to create after the tests pass
+        description: Swift package version to release after the tests pass
         required: true
         type: string
 
@@ -33,23 +33,30 @@ jobs:
       wasm_sdk_versions: '["6.3"]'
       wasm_sdk_build_command: swift test --disable-default-traits --disable-xctest
 
-  tag:
+  release:
     if: github.event_name == 'workflow_dispatch'
     needs: [macos, cross-platform]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: Create tag
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::Release tags must be created from main"
+            echo "::error::Releases must be created from main"
             exit 1
           fi
 
           gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
             --raw-field ref="refs/tags/$TAG" \
             --raw-field sha="$GITHUB_SHA"
+
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "$TAG" \
+            --latest \
+            --generate-notes
