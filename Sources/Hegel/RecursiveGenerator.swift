@@ -19,7 +19,7 @@ extension Gen {
             leaf: leaf(),
             branch: branch,
         )
-        return .unspanned { testCase in
+        return .unspanned(label: definition.label) { testCase in
             let recursion = try testCase.recursion(
                 maxDepth: maxDepth,
                 maxLeaves: maxLeaves,
@@ -41,6 +41,7 @@ extension Gen {
 }
 
 private final class RecursiveGeneratorDefinition<Value> {
+    var label: GeneratorLabel
     var leaf: Gen<Value>
     var branch: (Gen<Value>) -> Gen<Value>
 
@@ -48,6 +49,7 @@ private final class RecursiveGeneratorDefinition<Value> {
         leaf: Gen<Value>,
         branch: @escaping (Gen<Value>) -> Gen<Value>,
     ) {
+        self.label = GeneratorLabel("hegel-swift.recursive", components: [leaf.label])
         self.leaf = leaf
         self.branch = branch
     }
@@ -56,8 +58,8 @@ private final class RecursiveGeneratorDefinition<Value> {
         recursion: RecursionHandle,
         depth: UInt64,
     ) -> Gen<Value> {
-        .unspanned { [self, recursion] testCase in
-            try testCase.withRecursiveSpan {
+        .unspanned(label: label) { [self, recursion] testCase in
+            try testCase.withRecursiveSpan(label: label) {
                 let value: Value
                 if try testCase.shouldBranch(recursion, depth: depth) {
                     value = try branch(
@@ -169,13 +171,14 @@ extension TestCase {
     }
 
     fileprivate func withRecursiveSpan<Result>(
-        _ body: () throws -> Result
+        label: GeneratorLabel,
+        _ body: () throws -> Result,
     ) throws -> Result {
         try checkDraw(
             unsafe hegel_start_span(
                 context.handle,
                 handle,
-                UInt64(HEGEL_LABEL_RECURSIVE.rawValue),
+                label.rawValue,
             )
         )
         do {

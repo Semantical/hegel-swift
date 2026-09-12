@@ -257,6 +257,7 @@ public struct TestCase: ~Copyable {
 
     func filtered<Value>(
         _ generator: Gen<Value>,
+        label: GeneratorLabel,
         by predicate: (Value) throws -> Bool,
     ) throws -> Value {
         for _ in 0..<3 {
@@ -264,7 +265,7 @@ public struct TestCase: ~Copyable {
                 unsafe hegel_start_span(
                     context.handle,
                     handle,
-                    UInt64(HEGEL_LABEL_FILTER.rawValue),
+                    label.rawValue,
                 )
             )
             let value: Value
@@ -293,15 +294,17 @@ public struct TestCase: ~Copyable {
     func array<Element>(
         of element: Gen<Element>,
         size: ValidatedSizeBounds,
+        label: GeneratorLabel,
     ) throws -> [Element] {
-        unsafe try withCollection(
-            label: UInt64(HEGEL_LABEL_LIST.rawValue),
+        let elementLabel = GeneratorLabel("hegel-swift.arrayElement", components: [element.label])
+        return unsafe try withCollection(
+            label: label.rawValue,
             size: size,
         ) { collection in
             var elements: [Element] = []
             while unsafe try collectionHasMore(collection) {
                 let value = try withSpan(
-                    label: HEGEL_LABEL_LIST_ELEMENT
+                    label: elementLabel
                 ) {
                     try element.draw(self)
                 }
@@ -314,18 +317,20 @@ public struct TestCase: ~Copyable {
     func set<Element>(
         of element: Gen<Element>,
         size: ValidatedSizeBounds,
+        label: GeneratorLabel,
     ) throws -> Set<Element> {
+        let elementLabel = GeneratorLabel("hegel-swift.setElement", components: [element.label])
         let domain = element.enumeratedValues.map(unique)
         let size = try collectionSize(size, limitedTo: domain?.count)
         return unsafe try withCollection(
-            label: UInt64(HEGEL_LABEL_SET.rawValue),
+            label: label.rawValue,
             size: size,
         ) { collection in
             var values: Set<Element> = []
             var available = domain
             while unsafe try collectionHasMore(collection) {
                 let candidate = try withSpan(
-                    label: HEGEL_LABEL_SET_ELEMENT
+                    label: elementLabel
                 ) {
                     if let count = available?.count {
                         let index = try integer(in: 0...(count - 1))
@@ -346,11 +351,16 @@ public struct TestCase: ~Copyable {
         keys: Gen<Key>,
         values: Gen<Value>,
         size: ValidatedSizeBounds,
+        label: GeneratorLabel,
     ) throws -> [Key: Value] {
+        let entryLabel = GeneratorLabel(
+            "hegel-swift.dictionaryEntry",
+            components: [keys.label, values.label],
+        )
         let domain = keys.enumeratedValues.map(unique)
         let size = try collectionSize(size, limitedTo: domain?.count)
         return unsafe try withCollection(
-            label: UInt64(HEGEL_LABEL_MAP.rawValue),
+            label: label.rawValue,
             size: size,
         ) { collection in
             var dictionary: [Key: Value] = [:]
@@ -360,7 +370,7 @@ public struct TestCase: ~Copyable {
                     unsafe hegel_start_span(
                         context.handle,
                         handle,
-                        UInt64(HEGEL_LABEL_MAP_ENTRY.rawValue),
+                        entryLabel.rawValue,
                     )
                 )
                 let key: Key
@@ -402,10 +412,10 @@ public struct TestCase: ~Copyable {
     }
 
     func withSpan<Result>(
-        label: hegel_label_t,
+        label: GeneratorLabel,
         _ body: () throws -> Result,
     ) throws -> Result {
-        try withSpan(label: UInt64(label.rawValue), body)
+        try withSpan(label: label.rawValue, body)
     }
 
     func withSpan<Result>(

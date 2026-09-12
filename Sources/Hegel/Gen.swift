@@ -1,10 +1,6 @@
-import CHegel
-
-// "SWIFT" followed by 1, reserved for custom generator spans.
-private let compositeSpanLabel: UInt64 = 0x5357494654_01
-
 /// A value recipe drawn and shrunk by Hegel.
 public struct Gen<Value> {
+    package var label: GeneratorLabel
     var draw: (borrowing TestCase) throws -> Value
 
     // A known, practically enumerable domain lets unordered collections select
@@ -12,28 +8,41 @@ public struct Gen<Value> {
     var enumeratedValues: [Value]?
 
     /// Creates a generator from an imperative sequence of draws.
+    ///
+    /// The declaration site identifies this recipe to the shrinker. Supply a unique
+    /// `name` to share its identity across declaration sites or source rearrangements.
     public init(
-        _ draw: @escaping (borrowing TestCase) throws -> Value
+        name: String? = nil,
+        fileID: StaticString = #fileID,
+        line: UInt = #line,
+        column: UInt = #column,
+        _ draw: @escaping (borrowing TestCase) throws -> Value,
     ) {
-        self.init(enumeratedValues: nil) { testCase in
-            try testCase.withSpan(label: compositeSpanLabel) {
+        let label = GeneratorLabel(
+            "hegel-swift.custom<\(String(describing: Value.self))>:\(name ?? "\(fileID):\(line):\(column)")"
+        )
+        self.init(label: label, enumeratedValues: nil) { testCase in
+            try testCase.withSpan(label: label) {
                 try draw(testCase)
             }
         }
     }
 
     init(
+        label: GeneratorLabel,
         enumeratedValues: [Value]?,
         draw: @escaping (borrowing TestCase) throws -> Value,
     ) {
+        self.label = label
         self.draw = draw
         self.enumeratedValues = enumeratedValues
     }
 
     static func unspanned(
-        _ draw: @escaping (borrowing TestCase) throws -> Value
+        label: GeneratorLabel,
+        _ draw: @escaping (borrowing TestCase) throws -> Value,
     ) -> Self {
-        Self(enumeratedValues: nil, draw: draw)
+        Self(label: label, enumeratedValues: nil, draw: draw)
     }
 }
 
@@ -42,7 +51,10 @@ public struct Gen<Value> {
 extension Gen {
     /// Always generates the given value.
     public static func constant(_ value: Value) -> Self {
-        Self(enumeratedValues: [value]) { _ in value }
+        Self(
+            label: GeneratorLabel("hegel-swift.constant<\(String(describing: Value.self))>"),
+            enumeratedValues: [value],
+        ) { _ in value }
     }
 
     /// Generates one of the supplied values in their stable iteration order.
@@ -51,8 +63,9 @@ extension Gen {
     ) -> Self {
         let values = Array(values)
         precondition(!values.isEmpty)
-        return Self(enumeratedValues: values) { testCase in
-            try testCase.withSpan(label: HEGEL_LABEL_SAMPLED_FROM) {
+        let label = GeneratorLabel("hegel-swift.sampled<\(String(describing: Value.self))>")
+        return Self(label: label, enumeratedValues: values) { testCase in
+            try testCase.withSpan(label: label) {
                 let index = try testCase.integer(in: 0...(values.count - 1))
                 return values[index]
             }
@@ -104,8 +117,9 @@ extension Gen {
             domains.count == generators.count
             ? domains.flatMap { $0 }
             : nil
-        return Self(enumeratedValues: enumeratedValues) { testCase in
-            try testCase.withSpan(label: HEGEL_LABEL_ONE_OF) {
+        let label = GeneratorLabel("hegel-swift.oneOf", components: generators.map(\.label))
+        return Self(label: label, enumeratedValues: enumeratedValues) { testCase in
+            try testCase.withSpan(label: label) {
                 let index = try testCase.integer(in: 0...(generators.count - 1))
                 return try generators[index].draw(testCase)
             }
@@ -116,10 +130,12 @@ extension Gen {
     public func map<NewValue>(
         _ transform: @escaping (Value) throws -> NewValue
     ) -> Gen<NewValue> {
-        Gen<NewValue>(
-            enumeratedValues: try? enumeratedValues?.map(transform)
+        let label = GeneratorLabel("hegel-swift.map", components: [label])
+        return Gen<NewValue>(
+            label: label,
+            enumeratedValues: try? enumeratedValues?.map(transform),
         ) { testCase in
-            try testCase.withSpan(label: HEGEL_LABEL_MAPPED) {
+            try testCase.withSpan(label: label) {
                 try transform(draw(testCase))
             }
         }
@@ -129,8 +145,9 @@ extension Gen {
     public func flatMap<NewValue>(
         _ transform: @escaping (Value) throws -> Gen<NewValue>
     ) -> Gen<NewValue> {
-        .unspanned { testCase in
-            try testCase.withSpan(label: HEGEL_LABEL_FLAT_MAP) {
+        let label = GeneratorLabel("hegel-swift.flatMap", components: [label])
+        return .unspanned(label: label) { testCase in
+            try testCase.withSpan(label: label) {
                 let generator = try transform(draw(testCase))
                 return try generator.draw(testCase)
             }
@@ -141,27 +158,30 @@ extension Gen {
     public func filter(
         _ predicate: @escaping (Value) throws -> Bool
     ) -> Self {
+        let label = GeneratorLabel("hegel-swift.filter", components: [label])
         let enumeratedValues = try? enumeratedValues?.filter(predicate)
         if let enumeratedValues {
             guard !enumeratedValues.isEmpty else {
-                return Self(enumeratedValues: []) { _ in
+                return Self(label: label, enumeratedValues: []) { _ in
                     throw TestControl.invalid
                 }
             }
             return .sampled(from: enumeratedValues)
         }
-        return .unspanned { testCase in
-            try testCase.filtered(self, by: predicate)
+        return .unspanned(label: label) { testCase in
+            try testCase.filtered(self, label: label, by: predicate)
         }
     }
 
     /// Generates either no value or a value from this generator.
     public func optional(probabilityOfSome probability: Double = 0.5) -> Gen<Value?> {
         precondition((0...1).contains(probability))
+        let label = GeneratorLabel("hegel-swift.optional", components: [label])
         return Gen<Value?>(
-            enumeratedValues: enumeratedValues.map { [nil] + $0.map(Optional.some) }
+            label: label,
+            enumeratedValues: enumeratedValues.map { [nil] + $0.map(Optional.some) },
         ) { testCase in
-            try testCase.withSpan(label: HEGEL_LABEL_OPTIONAL) {
+            try testCase.withSpan(label: label) {
                 guard try testCase.boolean(probability: probability) else {
                     return nil
                 }
@@ -196,7 +216,9 @@ extension Gen where Value: FixedWidthInteger {
         let minimum = inclusiveLowerBound(range.lowerEndpoint, default: Value.min)
         let maximum = inclusiveUpperBound(range.upperEndpoint) ?? Value.max
         precondition(minimum <= maximum)
-        return .unspanned { testCase in
+        return .unspanned(
+            label: GeneratorLabel("hegel-swift.integers<\(String(describing: Value.self))>")
+        ) { testCase in
             try testCase.integer(in: minimum...maximum)
         }
     }
@@ -226,7 +248,10 @@ extension Gen where Value == Bool {
     /// Generates booleans that are true with the given probability.
     public static func booleans(probability: Double = 0.5) -> Self {
         precondition((0...1).contains(probability))
-        return Self(enumeratedValues: [false, true]) { testCase in
+        return Self(
+            label: GeneratorLabel("hegel-swift.booleans"),
+            enumeratedValues: [false, true],
+        ) { testCase in
             try testCase.boolean(probability: probability)
         }
     }
@@ -259,7 +284,9 @@ extension Gen where Value == Float {
             minimum < maximum
                 || (lower?.isInclusive != false && upper?.isInclusive != false)
         )
-        return .unspanned { testCase in
+        return .unspanned(
+            label: GeneratorLabel("hegel-swift.floats<\(String(describing: Value.self))>")
+        ) { testCase in
             try testCase.float(
                 minimum: minimum,
                 maximum: maximum,
@@ -300,7 +327,9 @@ extension Gen where Value == Double {
             minimum < maximum
                 || (lower?.isInclusive != false && upper?.isInclusive != false)
         )
-        return .unspanned { testCase in
+        return .unspanned(
+            label: GeneratorLabel("hegel-swift.floats<\(String(describing: Value.self))>")
+        ) { testCase in
             try testCase.float(
                 minimum: minimum,
                 maximum: maximum,
@@ -327,7 +356,7 @@ extension Gen where Value == [UInt8] {
 
     private static func bytes(size: ValidatedSizeBounds) -> Self {
         let size = size.resolvedForDirectGeneration()
-        return .unspanned { testCase in
+        return .unspanned(label: GeneratorLabel("hegel-swift.bytes")) { testCase in
             try testCase.bytes(size: size)
         }
     }
@@ -349,7 +378,7 @@ extension Gen where Value == String {
         let specification = Result {
             try StringGeneratorHandle.text(size: size)
         }
-        return .unspanned { testCase in
+        return .unspanned(label: GeneratorLabel("hegel-swift.strings")) { testCase in
             try testCase.string(using: specification.get())
         }
     }
@@ -361,7 +390,7 @@ extension Gen where Value == Unicode.Scalar {
         let specification = Result {
             try StringGeneratorHandle.text(size: 1...1)
         }
-        return .unspanned { testCase in
+        return .unspanned(label: GeneratorLabel("hegel-swift.unicodeScalars")) { testCase in
             let string = try testCase.string(using: specification.get())
             guard let scalar = string.unicodeScalars.first else {
                 throw HegelError("Hegel generated an empty Unicode scalar.")
@@ -402,8 +431,9 @@ extension Gen {
         of element: Gen<Element>,
         size: ValidatedSizeBounds,
     ) -> Self where Value == [Element] {
-        .unspanned { testCase in
-            try testCase.array(of: element, size: size)
+        let label = GeneratorLabel("hegel-swift.arrays", components: [element.label])
+        return .unspanned(label: label) { testCase in
+            try testCase.array(of: element, size: size, label: label)
         }
     }
 
@@ -411,8 +441,9 @@ extension Gen {
     public static func inlineArrays<let count: Int, Element>(
         of element: Gen<Element>
     ) -> Self where Value == [count of Element] {
-        .unspanned { testCase in
-            try testCase.withSpan(label: HEGEL_LABEL_TUPLE) {
+        let label = GeneratorLabel("hegel-swift.inlineArrays", components: [element.label])
+        return .unspanned(label: label) { testCase in
+            try testCase.withSpan(label: label) {
                 try [count of Element] { _ in
                     try element.draw(testCase)
                 }
@@ -439,8 +470,9 @@ extension Gen {
         of element: Gen<Element>,
         size: ValidatedSizeBounds,
     ) -> Self where Value == Set<Element> {
-        .unspanned { testCase in
-            try testCase.set(of: element, size: size)
+        let label = GeneratorLabel("hegel-swift.sets", components: [element.label])
+        return .unspanned(label: label) { testCase in
+            try testCase.set(of: element, size: size, label: label)
         }
     }
 
@@ -470,8 +502,12 @@ extension Gen {
         values: Gen<Element>,
         size: ValidatedSizeBounds,
     ) -> Self where Value == [Key: Element] {
-        .unspanned { testCase in
-            try testCase.dictionary(keys: keys, values: values, size: size)
+        let label = GeneratorLabel(
+            "hegel-swift.dictionaries",
+            components: [keys.label, values.label],
+        )
+        return .unspanned(label: label) { testCase in
+            try testCase.dictionary(keys: keys, values: values, size: size, label: label)
         }
     }
 
@@ -479,8 +515,13 @@ extension Gen {
     public static func tuple<each Element>(
         _ elements: repeat Gen<each Element>
     ) -> Self where Value == (repeat each Element) {
-        .unspanned { testCase in
-            try testCase.withSpan(label: HEGEL_LABEL_TUPLE) {
+        var components: [GeneratorLabel] = []
+        for element in repeat each elements {
+            components.append(element.label)
+        }
+        let label = GeneratorLabel("hegel-swift.tuple", components: components)
+        return .unspanned(label: label) { testCase in
+            try testCase.withSpan(label: label) {
                 (repeat try (each elements).draw(testCase))
             }
         }
