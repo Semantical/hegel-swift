@@ -36,13 +36,14 @@ struct ProfileTests {
         try #require(unsafe hegel_settings_set_test_cases(nil, handle, 17) == HEGEL_OK)
         try #require(unsafe hegel_settings_set_seed(nil, handle, 42, true) == HEGEL_OK)
         try #require(
-            unsafe hegel_settings_set_phases(nil, handle, HEGEL_PHASE_GENERATE.rawValue) == HEGEL_OK
+            unsafe hegel_settings_set_phases(nil, handle, UInt32(HEGEL_PHASE_GENERATE.rawValue))
+                == HEGEL_OK
         )
         try #require(
             unsafe hegel_settings_set_suppress_health_check(
                 nil,
                 handle,
-                HEGEL_HC_TOO_SLOW.rawValue,
+                UInt32(HEGEL_HC_TOO_SLOW.rawValue),
             ) == HEGEL_OK
         )
         let registered = unsafe name.withCString { name in
@@ -53,7 +54,7 @@ struct ProfileTests {
         for (overrides, expectedCount, expectedSeed, expectedChecks) in [
             (
                 Settings(profile: name), UInt64(17), UInt64(42) as UInt64?,
-                HEGEL_HC_TOO_SLOW.rawValue,
+                UInt32(HEGEL_HC_TOO_SLOW.rawValue),
             ),
             (
                 Settings(
@@ -85,7 +86,7 @@ struct ProfileTests {
             )
             #expect(count == expectedCount)
             #expect((hasSeed ? seed : nil) == expectedSeed)
-            #expect(phases == HEGEL_PHASE_GENERATE.rawValue)
+            #expect(phases == UInt32(HEGEL_PHASE_GENERATE.rawValue))
             #expect(checks == expectedChecks)
         }
     }

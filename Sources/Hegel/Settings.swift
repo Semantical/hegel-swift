@@ -179,7 +179,7 @@ package struct CSettings: ~Copyable {
                     unsafe hegel_settings_set_verbosity(
                         context.handle,
                         handle,
-                        verbosity.cValue.rawValue,
+                        UInt32(verbosity.cValue.rawValue),
                     )
                 )
             }
