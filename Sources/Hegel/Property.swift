@@ -458,7 +458,7 @@ func makeReplay(
 ) throws -> TestCase {
     let context = try Context()
     var handle: OpaquePointer?
-    try reproduction.withCString { reproduction in
+    unsafe try reproduction.withCString { reproduction in
         try context.check(
             unsafe hegel_test_case_from_blob(
                 context.handle,

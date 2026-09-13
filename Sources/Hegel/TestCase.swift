@@ -50,7 +50,7 @@ public struct TestCase: ~Copyable {
         label: StaticString,
     ) throws(HegelError) {
         let label = String(describing: label)
-        let result = label.withCString { label in
+        let result = unsafe label.withCString { label in
             unsafe hegel_target(
                 context.handle,
                 handle,
@@ -104,7 +104,7 @@ public struct TestCase: ~Copyable {
                 nil,
             )
         case .interesting(let origin):
-            result = origin.withCString { origin in
+            result = unsafe origin.withCString { origin in
                 unsafe hegel_mark_complete(
                     context.handle,
                     handle,
@@ -123,9 +123,9 @@ public struct TestCase: ~Copyable {
         let maximum = integerBytes(range.upperBound)
         var output = Array(repeating: UInt8(0), count: max(minimum.count, maximum.count))
         var outputLength = 0
-        let result = minimum.withUnsafeBufferPointer { minimum in
-            maximum.withUnsafeBufferPointer { maximum in
-                output.withUnsafeMutableBufferPointer { output in
+        let result = unsafe minimum.withUnsafeBufferPointer { minimum in
+            unsafe maximum.withUnsafeBufferPointer { maximum in
+                unsafe output.withUnsafeMutableBufferPointer { output in
                     unsafe hegel_generate_integer_big(
                         context.handle,
                         handle,
